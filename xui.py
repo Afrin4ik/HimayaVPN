@@ -68,37 +68,25 @@ class AsyncXUI:
         return self.session
 
     def _url(self, path: str) -> str:
-        return f"{self.base_url}/{path.strip('/')}"
+        return f"{self.base_url}/{path.strip("/")}"
 
     @staticmethod
     async def _read_json_response(response: aiohttp.ClientResponse) -> dict[str, Any]:
+        if response.status >= 400:
+            text: str = await response.text()
+            raise XUIException(f"HTTP error. Status: {response.status}. Message: {text[:500]}")
+
+        text: str = await response.text()
+        if not text.strip():
+            return {}
+
         try:
-            response.raise_for_status()
-            return await response.json()
-        except aiohttp.ClientResponseError as exc:
-            raise XUIException(f"HTTP error: {exc.status} - {exc.message}") from exc
-        except aiohttp.ContentTypeError as exc:
-            text = await response.text()
-            raise XUIException(f"Invalid JSON response: {text[:500]}") from exc
+            data = json.loads(text)
+            if not isinstance(data, dict):
+                raise XUIException(f"Unexpected response type: {type(data).__name__}")
+            return data
         except json.JSONDecodeError as exc:
-            text = await response.text()
             raise XUIException(f"Invalid JSON response: {text[:500]}") from exc
-
-        # if response.status >= 400:
-        #     text: str = await response.text()
-        #     raise XUIException(f"HTTP {response.status}: {text}")
-
-        # text: str = await response.text()
-        # if not text.strip():
-        #     return {}
-
-        # try:
-        #     data = json.loads(text)
-        #     if not isinstance(data, dict):
-        #         raise XUIException(f"Unexpected response type: {type(data).__name__}")
-        #     return data
-        # except json.JSONDecodeError as exc:
-        #     raise XUIException(f"Invalid json response: {text}") from exc
 
     async def get_inbounds(self) -> list[dict[str, Any]]:
         session: aiohttp.ClientSession = self._require_session()
