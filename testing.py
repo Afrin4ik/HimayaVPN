@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 import asyncio
-from xui import XUIConfig, AsyncXUI
+from xui import CreatedXUIClient, XUIConfig, AsyncXUI
 from typing import Any
 
 load_dotenv()
@@ -22,14 +22,31 @@ async def main():
     async with AsyncXUI(config) as session:
         # await session.login()
 
-        inbounds: list[dict[str, Any]] = await session.get_inbounds()
-        for inbound in inbounds:
-            print(
-                inbound["id"],
-                inbound.get("remark"),
-                inbound.get("protocol"),
-                inbound.get("port")
-            )
+        # inbounds: list[dict[str, Any]] = await session.get_inbounds()
+        # for inbound in inbounds:
+        #     print(
+        #         inbound["id"],
+        #         inbound.get("remark"),
+        #         inbound.get("protocol"),
+        #         inbound.get("port")
+        #     )
+
+        client: CreatedXUIClient = await session.add_client_to_inbounds(
+            inbound_ids=[2, 3],
+            email="python_test",
+            limit_ip=0,
+            total_gb=50,
+            expiry_days=30,
+            comment="test create client from python",
+        )
+
+        print(f"email: {client.email}")
+        print(f"uuid: {client.uuid}")
+        print(f"password: {client.password}")
+        print(f"hysteria_auth: {client.hysteria_auth}")
+        print(f"sub_id: {client.sub_id}")
+        print(f"inbound_ids: {client.inbound_ids}")
+        print(f"raw_response:\n{client.raw_response}")
 
 if __name__ == "__main__":
     asyncio.run(main())
