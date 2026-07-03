@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 import asyncio
-from xui import CreatedXUIClient, XUIConfig, AsyncXUI
+from xui import CreatedXUIClient, UpdatedXUIClient, XUIConfig, AsyncXUI
 from typing import Any
 
 load_dotenv()
@@ -22,6 +22,8 @@ async def main():
     async with AsyncXUI(config) as session:
         # await session.login()
 
+
+        # тест 1 (get inbounds)
         # inbounds: list[dict[str, Any]] = await session.get_inbounds()
         # for inbound in inbounds:
         #     print(
@@ -31,22 +33,37 @@ async def main():
         #         inbound.get("port")
         #     )
 
-        client: CreatedXUIClient = await session.add_client_to_inbounds(
-            inbound_ids=[2, 3],
-            email="python_test",
-            limit_ip=0,
-            total_gb=50,
-            expiry_days=30,
-            comment="test create client from python",
+
+        # тест 2 (add client to inbounds)
+        # client: CreatedXUIClient = await session.add_client_to_inbounds(
+        #     inbound_ids=[2, 3],
+        #     email="python_test_2",
+        #     limit_ip=1,
+        #     total_gb=25,
+        #     expiry_days=10,
+        #     comment="test 2 create client from python",
+        # )
+
+        # print(f"email: {client.email}")
+        # print(f"uuid: {client.uuid}")
+        # print(f"password: {client.password}")
+        # print(f"hysteria_auth: {client.hysteria_auth}")
+        # print(f"sub_id: {client.sub_id}")
+        # print(f"inbound_ids: {client.inbound_ids}")
+        # print(f"raw_response:\n{client.raw_response}")
+
+
+        # тест 3 (update client data; renew client)
+        updated_client: UpdatedXUIClient = await session.renew_client(
+            email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
+            days=3,
         )
 
-        print(f"email: {client.email}")
-        print(f"uuid: {client.uuid}")
-        print(f"password: {client.password}")
-        print(f"hysteria_auth: {client.hysteria_auth}")
-        print(f"sub_id: {client.sub_id}")
-        print(f"inbound_ids: {client.inbound_ids}")
-        print(f"raw_response:\n{client.raw_response}")
+        print(f"email: {updated_client.email}")
+        print(f"expiryTime (ms): {updated_client.client["expiryTime"]}")
+        print(f"enable: {updated_client.client["enable"]}")
+        print(f"totalGB (bytes): {updated_client.client["totalGB"]}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

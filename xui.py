@@ -4,6 +4,8 @@ import uuid
 import time
 import secrets
 from dataclasses import dataclass
+from urllib.parse import quote
+from copy import deepcopy
 from typing import Self, Any
 
 
@@ -23,6 +25,16 @@ class CreatedXUIClient:
     sub_id: str
     inbound_ids: list[int]
     raw_response: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class UpdatedXUIClient:
+    email: str
+    uuid: str | None
+    inbound_ids: list[int]
+    client: dict[str, Any]
+    raw_response: dict[str, Any]
+    traffic_reset_response: dict[str, Any] | None = None
 
 
 class XUIException(Exception):
@@ -82,11 +94,15 @@ class AsyncXUI:
         return self.session
 
     @staticmethod
-    def _gb_to_bytes(gb: int) -> int:
-        return int(gb * 1024 ** 3)
+    def _gb_to_bytes(total_gb: int) -> int:
+        if total_gb < 0:
+            raise XUIException("total_gb cannot be negative")
+        return int(total_gb * 1024 ** 3)
 
     @staticmethod
     def _expiry_days_to_ms(expiry_days: int) -> int:
+        if expiry_days < 0:
+            raise XUIException("expiry_days cannot be negative")
         if expiry_days == 0:
             return 0
         return int((time.time() + expiry_days * 24 * 60 * 60) * 1000)
@@ -108,21 +124,243 @@ class AsyncXUI:
         return secrets.token_hex(16)
 
     @staticmethod
-    def _check_adding_client_data(inbound_ids: list[int], email: str, limit_ip: int, total_gb: int, expiry_days: int) -> None:
-        if not inbound_ids:
-            raise XUIException("inbound_ids cannot be empty")
+    def _quote_path(path: str) -> str:
+        return quote(string=path, safe="")
 
+    @staticmethod
+    def _expiry_days_to_ms_from_base(days: int, current_expiry_ms: int | None = None) -> int:
+        if days < 0:
+            raise XUIException("days cannot be negative")
+
+        if days == 0:
+            return 0
+
+        now_ms = int(time.time() * 1000)
+        base_ms = now_ms
+
+        if current_expiry_ms is not None and current_expiry_ms > now_ms:
+            base_ms = current_expiry_ms
+
+        return base_ms + days * 24 * 60 * 60 * 1000
+
+    @staticmethod
+    def _extract_client_payload(obj: dict[str, Any]) -> tuple[dict[str, Any], list[int]]:
+        client: dict[str, Any] = obj.get("client")
+        if not isinstance(client, dict):
+            raise XUIException(f"Unexpected client payload: {obj}")
+
+        inbound_ids: list[int] = obj.get("inboundIds", [])
+        if inbound_ids is None:
+            inbound_ids = []
+        if not isinstance(inbound_ids, list) or not all(isinstance(inbound_id, int) for inbound_id in inbound_ids):
+            raise XUIException(f"Unexpected inboundIds payload: {obj}")
+
+        return client, inbound_ids
+
+    async def get_client_by_email(self, email: str) -> dict[str, Any]:
         if not email.strip():
             raise XUIException("email cannot be empty")
 
-        if limit_ip < 0:
+        session: aiohttp.ClientSession = self._require_session()
+
+        async with session.get(
+            url=self._url(path=f"/panel/api/clients/get/{self._quote_path(path=email)}"),
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot get client {email}: {data}")
+
+            obj: dict[str, Any] = data.get("obj")
+            if not isinstance(obj, dict):
+                raise XUIException(f"Unexpected client payload: {data}")
+
+            return obj
+
+    async def _post_update_client_payload(
+            self,
+            email: str,
+            client: dict[str, Any],
+            inbound_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        session: aiohttp.ClientSession = self._require_session()
+
+        params: dict[str, str] = {}
+        if inbound_ids is not None:
+            params["inboundIds"] = ",".join(str(inbound_id) for inbound_id in inbound_ids)
+
+        async with session.post(
+            url=self._url(path=f"/panel/api/clients/update/{self._quote_path(path=email)}"),
+            json=client,
+            params=params,
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot update client {email}: {data}")
+
+            return data
+
+    async def update_client_data(
+            self,
+            email: str,
+            *,
+            inbound_ids: list[int] | None = None,
+            flow: str | None = None,
+            limit_ip: int | None = None,
+            total_gb: int | None = None,
+            expiry_time_ms: int | None = None,
+            enable: bool | None = None,
+            tg_id: int | None = None,
+            comment: str | None = None,
+            group: str | None = None,
+            reset: int | None = None,
+    ) -> UpdatedXUIClient:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        if inbound_ids is not None and not inbound_ids:
+            raise XUIException("inbound_ids cannot be empty")
+
+        if limit_ip is not None and limit_ip < 0:
             raise XUIException("limit_ip cannot be negative")
 
-        if total_gb < 0:
+        if total_gb is not None and total_gb < 0:
             raise XUIException("total_gb cannot be negative")
 
-        if expiry_days < 0:
-            raise XUIException("expiry_days cannot be negative")
+        if expiry_time_ms is not None and expiry_time_ms < 0:
+            raise XUIException("expiry_time_ms cannot be negative")
+
+        if enable is not None and not isinstance(enable, bool):
+            raise XUIException("enable must be bool")
+
+        if tg_id is not None and tg_id < 0:
+            raise XUIException("tg_id cannot be negative")
+
+        current_obj: dict[str, Any] = await self.get_client_by_email(email=email)
+        current_client, current_inbound_ids = self._extract_client_payload(obj=current_obj)
+
+        updated_client: dict[str, Any] = deepcopy(current_client)
+
+        # uuid_value = updated_client.get("uuid") or updated_client.get("id")
+        # if uuid_value is not None and "uuid" not in updated_client:
+        #     updated_client["uuid"] = uuid_value
+
+        # if uuid_value is not None and "id" not in updated_client:
+        #     updated_client["id"] = uuid_value
+
+        client_uuid = updated_client.get("uuid")
+        if client_uuid is None:
+            client_uuid = updated_client.get("id")
+        if client_uuid is not None:
+            updated_client["uuid"] = client_uuid
+            updated_client["id"] = client_uuid
+
+        if flow is not None:
+            updated_client["flow"] = flow
+
+        if limit_ip is not None:
+            updated_client["limitIp"] = limit_ip
+
+        if total_gb is not None:
+            updated_client["totalGB"] = self._gb_to_bytes(total_gb=total_gb)
+
+        if expiry_time_ms is not None:
+            updated_client["expiryTime"] = expiry_time_ms
+
+        if enable is not None:
+            updated_client["enable"] = enable
+
+        if tg_id is not None:
+            updated_client["tgId"] = tg_id
+
+        if comment is not None:
+            updated_client["comment"] = comment
+
+        if group is not None:
+            updated_client["group"] = group
+
+        if reset is not None:
+            updated_client["reset"] = reset
+
+        if inbound_ids is not None:
+            target_inbound_ids = inbound_ids
+        else:
+            target_inbound_ids = current_inbound_ids
+
+        data: dict[str, Any] = await self._post_update_client_payload(
+            email=email,
+            client=updated_client,
+            inbound_ids=target_inbound_ids,
+        )
+
+        return UpdatedXUIClient(
+            email=str(updated_client.get("email", email)),
+            uuid=str(client_uuid) if client_uuid is not None else None,
+            inbound_ids=target_inbound_ids,
+            client=updated_client,
+            raw_response=data,
+        )
+
+    async def reset_client_traffic(self, email: str) -> dict[str, Any]:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        session: aiohttp.ClientSession = self._require_session()
+
+        async with session.post(
+            url=self._url(path=f"/panel/api/clients/resetTraffic/{self._quote_path(path=email)}"),
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot reset traffic for client {email}: {data}")
+
+            return data
+
+    async def renew_client(
+            self,
+            email: str,
+            days: int,
+            reset_traffic_bool: bool = True,
+    ) -> UpdatedXUIClient:
+        if days < 0:
+            raise XUIException("days cannot be negative")
+
+        current_obj: dict[str, Any] = await self.get_client_by_email(email)
+        current_client, _ = self._extract_client_payload(current_obj)
+
+        current_expiry_ms_raw = current_client.get("expiryTime", 0)
+        try:
+            current_expiry_ms = int(current_expiry_ms_raw or 0)
+        except (TypeError, ValueError):
+            raise XUIException(f"Unexpected expiryTime value: {current_expiry_ms_raw}")
+
+        new_expiry_time_ms: int = self._expiry_days_to_ms_from_base(days=days, current_expiry_ms=current_expiry_ms)
+
+        updated_client: UpdatedXUIClient = await self.update_client_data(
+            email=email,
+            expiry_time_ms=new_expiry_time_ms,
+            enable=True,
+        )
+
+        traffic_reset_response: dict[str, Any] | None = None
+
+        if reset_traffic_bool:
+            traffic_reset_response = await self.reset_client_traffic(email=email)
+
+        return UpdatedXUIClient(
+            email=updated_client.email,
+            uuid=updated_client.uuid,
+            inbound_ids=updated_client.inbound_ids,
+            client=updated_client.client,
+            raw_response=updated_client.raw_response,
+            traffic_reset_response=traffic_reset_response,
+        )
+
 
     @staticmethod
     async def _read_json_response(response: aiohttp.ClientResponse) -> dict[str, Any]:
@@ -187,13 +425,14 @@ class AsyncXUI:
             group: str = "",
     ) -> CreatedXUIClient:
 
-        self._check_adding_client_data(
-            inbound_ids=inbound_ids,
-            email=email,
-            limit_ip=limit_ip,
-            total_gb=total_gb,
-            expiry_days=expiry_days,
-        )
+        if not inbound_ids:
+            raise XUIException("inbound_ids cannot be empty")
+
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        if limit_ip < 0:
+            raise XUIException("limit_ip cannot be negative")
 
         session: aiohttp.ClientSession = self._require_session()
 
@@ -211,7 +450,7 @@ class AsyncXUI:
             "auth": client_hysteria_auth,
             "flow": flow,
             "limitIp": limit_ip,
-            "totalGB": self._gb_to_bytes(gb=total_gb),
+            "totalGB": self._gb_to_bytes(total_gb=total_gb),
             "expiryTime": self._expiry_days_to_ms(expiry_days=expiry_days),
             "enable": enable,
             "tgId": tg_id,
