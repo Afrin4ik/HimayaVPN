@@ -144,6 +144,31 @@ class AsyncXUI:
         return base_ms + days * 24 * 60 * 60 * 1000
 
     @staticmethod
+    def _client_record_to_update_payload(client_record: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        client: dict[str, Any] = deepcopy(client_record)
+
+        client_uuid = client.get("uuid")
+        if client_uuid is None:
+            raw_id = client.get("id")
+            if isinstance(raw_id, str):
+                client_uuid = raw_id
+
+        if client_uuid is None:
+            raise XUIException(f"Client uuid is missing: {client_record}")
+
+        client["id"] = str(client_uuid)
+
+        client.pop("uuid", None)
+        client.pop("usedTraffic", None)
+        client.pop("traffic", None)
+        client.pop("createdAt", None)
+        client.pop("updatedAt", None)
+        client.pop("created_at", None)
+        client.pop("updated_at", None)
+
+        return client, str(client_uuid)
+
+    @staticmethod
     def _extract_client_payload(obj: dict[str, Any]) -> tuple[dict[str, Any], list[int]]:
         client: dict[str, Any] = obj.get("client")
         if not isinstance(client, dict):
@@ -243,21 +268,7 @@ class AsyncXUI:
         current_obj: dict[str, Any] = await self.get_client_by_email(email=email)
         current_client, current_inbound_ids = self._extract_client_payload(obj=current_obj)
 
-        updated_client: dict[str, Any] = deepcopy(current_client)
-
-        # uuid_value = updated_client.get("uuid") or updated_client.get("id")
-        # if uuid_value is not None and "uuid" not in updated_client:
-        #     updated_client["uuid"] = uuid_value
-
-        # if uuid_value is not None and "id" not in updated_client:
-        #     updated_client["id"] = uuid_value
-
-        client_uuid = updated_client.get("uuid")
-        if client_uuid is None:
-            client_uuid = updated_client.get("id")
-        if client_uuid is not None:
-            updated_client["uuid"] = client_uuid
-            updated_client["id"] = client_uuid
+        updated_client, client_uuid = self._client_record_to_update_payload(client_record=current_client)
 
         if flow is not None:
             updated_client["flow"] = flow

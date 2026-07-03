@@ -55,8 +55,8 @@ async def main():
 
         # тест 3 (update client data; renew client)
         updated_client: UpdatedXUIClient = await session.renew_client(
-            email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
-            days=3,
+            email="python_test_2_5e001dc6-4632-4e59-95b3-5a16dd88636e",
+            days=2,
         )
 
         print(f"email: {updated_client.email}")
