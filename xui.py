@@ -124,6 +124,24 @@ class AsyncXUI:
         return secrets.token_hex(16)
 
     @staticmethod
+    async def _read_json_response(response: aiohttp.ClientResponse) -> dict[str, Any]:
+        if response.status >= 400:
+            text: str = await response.text()
+            raise XUIException(f"HTTP error. Status: {response.status}. Message: {text[:500]}")
+
+        text: str = await response.text()
+        if not text.strip():
+            return {}
+
+        try:
+            data = json.loads(text)
+            if not isinstance(data, dict):
+                raise XUIException(f"Unexpected response type: {type(data).__name__}")
+            return data
+        except json.JSONDecodeError as exc:
+            raise XUIException(f"Invalid JSON response: {text[:500]}") from exc
+
+    @staticmethod
     def _quote_path(path: str) -> str:
         return quote(string=path, safe="")
 
@@ -144,7 +162,7 @@ class AsyncXUI:
         return base_ms + days * 24 * 60 * 60 * 1000
 
     @staticmethod
-    def _client_record_to_update_payload(client_record: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def _client_record_to_update_payload(client_record: dict[str, Any]) -> dict[str, Any]:
         client: dict[str, Any] = deepcopy(client_record)
 
         client_uuid = client.get("uuid")
@@ -166,7 +184,7 @@ class AsyncXUI:
         client.pop("created_at", None)
         client.pop("updated_at", None)
 
-        return client, str(client_uuid)
+        return client
 
     @staticmethod
     def _extract_client_payload(obj: dict[str, Any]) -> tuple[dict[str, Any], list[int]]:
@@ -181,26 +199,6 @@ class AsyncXUI:
             raise XUIException(f"Unexpected inboundIds payload: {obj}")
 
         return client, inbound_ids
-
-    async def get_client_by_email(self, email: str) -> dict[str, Any]:
-        if not email.strip():
-            raise XUIException("email cannot be empty")
-
-        session: aiohttp.ClientSession = self._require_session()
-
-        async with session.get(
-            url=self._url(path=f"/panel/api/clients/get/{self._quote_path(path=email)}"),
-        ) as response:
-            data: dict[str, Any] = await self._read_json_response(response=response)
-
-            if not data.get("success", False):
-                raise XUIException(f"Cannot get client {email}: {data}")
-
-            obj: dict[str, Any] = data.get("obj")
-            if not isinstance(obj, dict):
-                raise XUIException(f"Unexpected client payload: {data}")
-
-            return obj
 
     async def _post_update_client_payload(
             self,
@@ -228,168 +226,6 @@ class AsyncXUI:
                 raise XUIException(f"Cannot update client {email}: {data}")
 
             return data
-
-    async def update_client_data(
-            self,
-            email: str,
-            *,
-            inbound_ids: list[int] | None = None,
-            flow: str | None = None,
-            limit_ip: int | None = None,
-            total_gb: int | None = None,
-            expiry_time_ms: int | None = None,
-            enable: bool | None = None,
-            tg_id: int | None = None,
-            comment: str | None = None,
-            group: str | None = None,
-            reset: int | None = None,
-    ) -> UpdatedXUIClient:
-        if not email.strip():
-            raise XUIException("email cannot be empty")
-
-        if inbound_ids is not None and not inbound_ids:
-            raise XUIException("inbound_ids cannot be empty")
-
-        if limit_ip is not None and limit_ip < 0:
-            raise XUIException("limit_ip cannot be negative")
-
-        if total_gb is not None and total_gb < 0:
-            raise XUIException("total_gb cannot be negative")
-
-        if expiry_time_ms is not None and expiry_time_ms < 0:
-            raise XUIException("expiry_time_ms cannot be negative")
-
-        if enable is not None and not isinstance(enable, bool):
-            raise XUIException("enable must be bool")
-
-        if tg_id is not None and tg_id < 0:
-            raise XUIException("tg_id cannot be negative")
-
-        current_obj: dict[str, Any] = await self.get_client_by_email(email=email)
-        current_client, current_inbound_ids = self._extract_client_payload(obj=current_obj)
-
-        updated_client, client_uuid = self._client_record_to_update_payload(client_record=current_client)
-
-        if flow is not None:
-            updated_client["flow"] = flow
-
-        if limit_ip is not None:
-            updated_client["limitIp"] = limit_ip
-
-        if total_gb is not None:
-            updated_client["totalGB"] = self._gb_to_bytes(total_gb=total_gb)
-
-        if expiry_time_ms is not None:
-            updated_client["expiryTime"] = expiry_time_ms
-
-        if enable is not None:
-            updated_client["enable"] = enable
-
-        if tg_id is not None:
-            updated_client["tgId"] = tg_id
-
-        if comment is not None:
-            updated_client["comment"] = comment
-
-        if group is not None:
-            updated_client["group"] = group
-
-        if reset is not None:
-            updated_client["reset"] = reset
-
-        if inbound_ids is not None:
-            target_inbound_ids = inbound_ids
-        else:
-            target_inbound_ids = current_inbound_ids
-
-        data: dict[str, Any] = await self._post_update_client_payload(
-            email=email,
-            client=updated_client,
-            inbound_ids=target_inbound_ids,
-        )
-
-        return UpdatedXUIClient(
-            email=str(updated_client.get("email", email)),
-            uuid=str(client_uuid) if client_uuid is not None else None,
-            inbound_ids=target_inbound_ids,
-            client=updated_client,
-            raw_response=data,
-        )
-
-    async def reset_client_traffic(self, email: str) -> dict[str, Any]:
-        if not email.strip():
-            raise XUIException("email cannot be empty")
-
-        session: aiohttp.ClientSession = self._require_session()
-
-        async with session.post(
-            url=self._url(path=f"/panel/api/clients/resetTraffic/{self._quote_path(path=email)}"),
-        ) as response:
-            data: dict[str, Any] = await self._read_json_response(response=response)
-
-            if not data.get("success", False):
-                raise XUIException(f"Cannot reset traffic for client {email}: {data}")
-
-            return data
-
-    async def renew_client(
-            self,
-            email: str,
-            days: int,
-            reset_traffic_bool: bool = True,
-    ) -> UpdatedXUIClient:
-        if days < 0:
-            raise XUIException("days cannot be negative")
-
-        current_obj: dict[str, Any] = await self.get_client_by_email(email)
-        current_client, _ = self._extract_client_payload(current_obj)
-
-        current_expiry_ms_raw = current_client.get("expiryTime", 0)
-        try:
-            current_expiry_ms = int(current_expiry_ms_raw or 0)
-        except (TypeError, ValueError):
-            raise XUIException(f"Unexpected expiryTime value: {current_expiry_ms_raw}")
-
-        new_expiry_time_ms: int = self._expiry_days_to_ms_from_base(days=days, current_expiry_ms=current_expiry_ms)
-
-        updated_client: UpdatedXUIClient = await self.update_client_data(
-            email=email,
-            expiry_time_ms=new_expiry_time_ms,
-            enable=True,
-        )
-
-        traffic_reset_response: dict[str, Any] | None = None
-
-        if reset_traffic_bool:
-            traffic_reset_response = await self.reset_client_traffic(email=email)
-
-        return UpdatedXUIClient(
-            email=updated_client.email,
-            uuid=updated_client.uuid,
-            inbound_ids=updated_client.inbound_ids,
-            client=updated_client.client,
-            raw_response=updated_client.raw_response,
-            traffic_reset_response=traffic_reset_response,
-        )
-
-
-    @staticmethod
-    async def _read_json_response(response: aiohttp.ClientResponse) -> dict[str, Any]:
-        if response.status >= 400:
-            text: str = await response.text()
-            raise XUIException(f"HTTP error. Status: {response.status}. Message: {text[:500]}")
-
-        text: str = await response.text()
-        if not text.strip():
-            return {}
-
-        try:
-            data = json.loads(text)
-            if not isinstance(data, dict):
-                raise XUIException(f"Unexpected response type: {type(data).__name__}")
-            return data
-        except json.JSONDecodeError as exc:
-            raise XUIException(f"Invalid JSON response: {text[:500]}") from exc
 
     async def get_inbounds(self) -> list[dict[str, Any]]:
         session: aiohttp.ClientSession = self._require_session()
@@ -521,4 +357,171 @@ class AsyncXUI:
             tg_id=tg_id,
             comment=comment,
             group=group,
+        )
+
+    async def get_client_by_email(self, email: str) -> dict[str, Any]:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        session: aiohttp.ClientSession = self._require_session()
+
+        async with session.get(
+            url=self._url(path=f"/panel/api/clients/get/{self._quote_path(path=email)}"),
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot get client {email}: {data}")
+
+            obj: dict[str, Any] = data.get("obj")
+            if not isinstance(obj, dict):
+                raise XUIException(f"Unexpected client payload: {data}")
+
+            return obj
+
+    async def update_client_data(
+            self,
+            email: str,
+            *,
+            inbound_ids: list[int] | None = None,
+            flow: str | None = None,
+            limit_ip: int | None = None,
+            total_gb: int | None = None,
+            expiry_time_ms: int | None = None,
+            enable: bool | None = None,
+            tg_id: int | None = None,
+            comment: str | None = None,
+            group: str | None = None,
+            reset: int | None = None,
+    ) -> UpdatedXUIClient:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        if inbound_ids is not None and not inbound_ids:
+            raise XUIException("inbound_ids cannot be empty")
+
+        if limit_ip is not None and limit_ip < 0:
+            raise XUIException("limit_ip cannot be negative")
+
+        if total_gb is not None and total_gb < 0:
+            raise XUIException("total_gb cannot be negative")
+
+        if expiry_time_ms is not None and expiry_time_ms < 0:
+            raise XUIException("expiry_time_ms cannot be negative")
+
+        if enable is not None and not isinstance(enable, bool):
+            raise XUIException("enable must be bool")
+
+        if tg_id is not None and tg_id < 0:
+            raise XUIException("tg_id cannot be negative")
+
+        current_obj: dict[str, Any] = await self.get_client_by_email(email=email)
+        current_client, current_inbound_ids = self._extract_client_payload(obj=current_obj)
+
+        updated_client: dict[str, Any] = self._client_record_to_update_payload(client_record=current_client)
+
+        client_uuid = updated_client.get("id")
+
+        if flow is not None:
+            updated_client["flow"] = flow
+
+        if limit_ip is not None:
+            updated_client["limitIp"] = limit_ip
+
+        if total_gb is not None:
+            updated_client["totalGB"] = self._gb_to_bytes(total_gb=total_gb)
+
+        if expiry_time_ms is not None:
+            updated_client["expiryTime"] = expiry_time_ms
+
+        if enable is not None:
+            updated_client["enable"] = enable
+
+        if tg_id is not None:
+            updated_client["tgId"] = tg_id
+
+        if comment is not None:
+            updated_client["comment"] = comment
+
+        if group is not None:
+            updated_client["group"] = group
+
+        if reset is not None:
+            updated_client["reset"] = reset
+
+        if inbound_ids is not None:
+            target_inbound_ids = inbound_ids
+        else:
+            target_inbound_ids = current_inbound_ids
+
+        data: dict[str, Any] = await self._post_update_client_payload(
+            email=email,
+            client=updated_client,
+            inbound_ids=target_inbound_ids,
+        )
+
+        return UpdatedXUIClient(
+            email=email,
+            uuid=client_uuid,
+            inbound_ids=target_inbound_ids,
+            client=updated_client,
+            raw_response=data,
+        )
+
+    async def reset_client_traffic(self, email: str) -> dict[str, Any]:
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        session: aiohttp.ClientSession = self._require_session()
+
+        async with session.post(
+            url=self._url(path=f"/panel/api/clients/resetTraffic/{self._quote_path(path=email)}"),
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot reset traffic for client {email}: {data}")
+
+            return data
+
+    async def renew_client(
+            self,
+            email: str,
+            days: int,
+            reset_traffic_bool: bool = True,
+    ) -> UpdatedXUIClient:
+        if days < 0:
+            raise XUIException("days cannot be negative")
+
+        current_obj: dict[str, Any] = await self.get_client_by_email(email)
+        current_client, _ = self._extract_client_payload(current_obj)
+
+        current_expiry_ms_raw = current_client.get("expiryTime")
+        try:
+            if current_expiry_ms_raw is None:
+                current_expiry_ms = 0
+            else:
+                current_expiry_ms = int(current_expiry_ms_raw)
+        except (TypeError, ValueError):
+            raise XUIException(f"Unexpected expiryTime value: {current_expiry_ms_raw}")
+
+        new_expiry_time_ms: int = self._expiry_days_to_ms_from_base(days=days, current_expiry_ms=current_expiry_ms)
+
+        updated_client: UpdatedXUIClient = await self.update_client_data(
+            email=email,
+            expiry_time_ms=new_expiry_time_ms,
+            enable=True,
+        )
+
+        traffic_reset_response: dict[str, Any] | None = None
+        if reset_traffic_bool:
+            traffic_reset_response = await self.reset_client_traffic(email=email)
+
+        return UpdatedXUIClient(
+            email=updated_client.email,
+            uuid=updated_client.uuid,
+            inbound_ids=updated_client.inbound_ids,
+            client=updated_client.client,
+            raw_response=updated_client.raw_response,
+            traffic_reset_response=traffic_reset_response,
         )

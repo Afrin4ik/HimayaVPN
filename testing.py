@@ -55,14 +55,20 @@ async def main():
 
         # тест 3 (update client data; renew client)
         updated_client: UpdatedXUIClient = await session.renew_client(
-            email="python_test_2_5e001dc6-4632-4e59-95b3-5a16dd88636e",
-            days=2,
+            email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
+            days=1,
         )
 
         print(f"email: {updated_client.email}")
+        print(f"uuid: {updated_client.uuid}")
+        print(f"inbound_ids: {updated_client.inbound_ids}")
+        print(f"client: {updated_client.client}")
+        print(f"raw_response: {updated_client.raw_response}")
+        print(f"traffic_reset_response: {updated_client.traffic_reset_response}")
+        print("-"*15)
         print(f"expiryTime (ms): {updated_client.client["expiryTime"]}")
-        print(f"enable: {updated_client.client["enable"]}")
         print(f"totalGB (bytes): {updated_client.client["totalGB"]}")
+        print(f"enable: {updated_client.client["enable"]}")
 
 
 if __name__ == "__main__":
