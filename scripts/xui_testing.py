@@ -1,22 +1,22 @@
-import os
-from dotenv import load_dotenv
+from app.config import Settings, get_settings
 
 import asyncio
-from xui import CreatedXUIClient, UpdatedXUIClient, XUIConfig, AsyncXUI
+from app.integrations.xui import CreatedXUIClient, UpdatedXUIClient, XUIConfig, AsyncXUI
 from typing import Any
 
-load_dotenv()
-BASE_URL: str | None = os.getenv(key="XUI_BASE_URL")
-WEB_BASE_PATH: str | None = os.getenv(key="XUI_WEB_BASE_PATH")
-API_TOKEN: str | None = os.getenv("XUI_API_TOKEN")
+# BASE_URL: str | None = os.getenv(key="XUI_BASE_URL")
+# WEB_BASE_PATH: str | None = os.getenv(key="XUI_WEB_BASE_PATH")
+# API_TOKEN: str | None = os.getenv(key="XUI_API_TOKEN")
 # USERNAME: str | None = os.getenv(key="XUI_USERNAME")
 # PASSWORD: str | None = os.getenv(key="XUI+PASSWORD")
 
 async def main():
+    settings: Settings = get_settings()
+
     config = XUIConfig(
-        base_url=BASE_URL,
-        web_base_path=WEB_BASE_PATH,
-        api_token=API_TOKEN
+        base_url=settings.xui_base_url,
+        web_base_path=settings.xui_web_base_path,
+        api_token=settings.xui_api_token,
     )
 
     async with AsyncXUI(config) as session:
@@ -66,9 +66,9 @@ async def main():
         print(f"raw_response: {updated_client.raw_response}")
         print(f"traffic_reset_response: {updated_client.traffic_reset_response}")
         print("-"*15)
-        print(f"expiryTime (ms): {updated_client.client["expiryTime"]}")
-        print(f"totalGB (bytes): {updated_client.client["totalGB"]}")
-        print(f"enable: {updated_client.client["enable"]}")
+        print(f"expiryTime (ms): {updated_client.client['expiryTime']}")
+        print(f"totalGB (bytes): {updated_client.client['totalGB']}")
+        print(f"enable: {updated_client.client['enable']}")
 
 
 if __name__ == "__main__":
