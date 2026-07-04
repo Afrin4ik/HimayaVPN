@@ -271,15 +271,49 @@ class AsyncXUI:
             comment: str = "",
             group: str = "",
     ) -> CreatedXUIClient:
-
-        if not inbound_ids:
-            raise XUIException("inbound_ids cannot be empty")
-
+        if not isinstance(email, str):
+            raise XUIException("email must be an str")
         if not email.strip():
             raise XUIException("email cannot be empty")
 
+        if not isinstance(inbound_ids, list):
+            raise XUIException("inbound_ids must be a list")
+        if not inbound_ids:
+            raise XUIException("inbound_ids cannot be empty")
+        if not all(isinstance(inbound_id, int) for inbound_id in inbound_ids):
+            raise XUIException("in inbound_ids must be ints")
+
+        if not isinstance(flow, str):
+            raise XUIException("flow must be a str")
+
+        if not isinstance(limit_ip, int):
+            raise XUIException("limit_ip must be an int")
         if limit_ip < 0:
             raise XUIException("limit_ip cannot be negative")
+
+        if not isinstance(total_gb, int):
+            raise XUIException("total_gb must be an int")
+        if total_gb < 0:
+            raise XUIException("total_gb cannot be negative")
+
+        if not isinstance(expiry_days, int):
+            raise XUIException("expiry_time must be an int")
+        if expiry_days < 0:
+            raise XUIException("expiry_time_ms cannot be negative")
+
+        if not isinstance(enable, bool):
+            raise XUIException("enable must be bool")
+
+        if not isinstance(tg_id, int):
+            raise XUIException("tg_id must be an int")
+        if tg_id < 0:
+            raise XUIException("tg_id cannot be negative")
+
+        if not isinstance(comment, str):
+            raise XUIException("comment must be a str")
+
+        if not isinstance(group, str):
+            raise XUIException("group must be a str")
 
         session: aiohttp.ClientSession = self._require_session()
 
@@ -394,26 +428,62 @@ class AsyncXUI:
             group: str | None = None,
             reset: int | None = None,
     ) -> UpdatedXUIClient:
-        if not email.strip():
+        if not isinstance(email, str):
+            raise XUIException("email must be an str")
+        elif not email.strip():
             raise XUIException("email cannot be empty")
 
-        if inbound_ids is not None and not inbound_ids:
-            raise XUIException("inbound_ids cannot be empty")
+        if inbound_ids is not None:
+            if not isinstance(inbound_ids, list):
+                raise XUIException("inbound_ids must be a list")
+            if not inbound_ids:
+                raise XUIException("inbound_ids cannot be empty")
+            if not all(isinstance(inbound_id, int) for inbound_id in inbound_ids):
+                raise XUIException("in inbound_ids must be ints")
 
-        if limit_ip is not None and limit_ip < 0:
-            raise XUIException("limit_ip cannot be negative")
+        if flow is not None:
+            if not isinstance(flow, str):
+                raise XUIException("flow must be a str")
 
-        if total_gb is not None and total_gb < 0:
-            raise XUIException("total_gb cannot be negative")
+        if limit_ip is not None:
+            if not isinstance(limit_ip, int):
+                raise XUIException("limit_ip must be an int")
+            if limit_ip < 0:
+                raise XUIException("limit_ip cannot be negative")
 
-        if expiry_time_ms is not None and expiry_time_ms < 0:
-            raise XUIException("expiry_time_ms cannot be negative")
+        if total_gb is not None:
+            if not isinstance(total_gb, int):
+                raise XUIException("total_gb must be an int")
+            if total_gb < 0:
+                raise XUIException("total_gb cannot be negative")
 
-        if enable is not None and not isinstance(enable, bool):
-            raise XUIException("enable must be bool")
+        if expiry_time_ms is not None:
+            if not isinstance(expiry_time_ms, int):
+                raise XUIException("expiry_time must be an int")
+            if expiry_time_ms < 0:
+                raise XUIException("expiry_time_ms cannot be negative")
 
-        if tg_id is not None and tg_id < 0:
-            raise XUIException("tg_id cannot be negative")
+        if enable is not None:
+            if not isinstance(enable, bool):
+                raise XUIException("enable must be bool")
+
+        if tg_id is not None:
+            if not isinstance(tg_id, int):
+                raise XUIException("tg_id must be an int")
+            if tg_id < 0:
+                raise XUIException("tg_id cannot be negative")
+
+        if comment is not None:
+            if not isinstance(comment, str):
+                raise XUIException("comment must be a str")
+
+        if group is not None:
+            if not isinstance(group, str):
+                raise XUIException("group must be a str")
+
+        if reset is not None:
+            if not isinstance(reset, int):
+                raise XUIException("reset must be an int")
 
         current_obj: dict[str, Any] = await self.get_client_by_email(email=email)
         current_client, current_inbound_ids = self._extract_client_payload(obj=current_obj)
@@ -490,6 +560,8 @@ class AsyncXUI:
             days: int,
             reset_traffic_bool: bool = True,
     ) -> UpdatedXUIClient:
+        if not isinstance(days, int):
+            raise XUIException("days must be an int")
         if days < 0:
             raise XUIException("days cannot be negative")
 
