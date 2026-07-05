@@ -19,7 +19,7 @@ async def main():
         api_token=settings.xui_api_token,
     )
 
-    async with AsyncXUI(config) as session:
+    async with AsyncXUI(config=config) as session:
         # await session.login()
 
 
@@ -54,21 +54,26 @@ async def main():
 
 
         # тест 3 (update client data; renew client)
-        updated_client: UpdatedXUIClient = await session.renew_client(
-            email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
-            days=1,
-        )
+        # updated_client: UpdatedXUIClient = await session.renew_client(
+        #     email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
+        #     days=1,
+        # )
 
-        print(f"email: {updated_client.email}")
-        print(f"uuid: {updated_client.uuid}")
-        print(f"inbound_ids: {updated_client.inbound_ids}")
-        print(f"client: {updated_client.client}")
-        print(f"raw_response: {updated_client.raw_response}")
-        print(f"traffic_reset_response: {updated_client.traffic_reset_response}")
-        print("-"*15)
-        print(f"expiryTime (ms): {updated_client.client['expiryTime']}")
-        print(f"totalGB (bytes): {updated_client.client['totalGB']}")
-        print(f"enable: {updated_client.client['enable']}")
+        # print(f"email: {updated_client.email}")
+        # print(f"uuid: {updated_client.uuid}")
+        # print(f"inbound_ids: {updated_client.inbound_ids}")
+        # print(f"client: {updated_client.client}")
+        # print(f"raw_response: {updated_client.raw_response}")
+        # print(f"traffic_reset_response: {updated_client.traffic_reset_response}")
+        # print("-"*15)
+        # print(f"expiryTime (ms): {updated_client.client['expiryTime']}")
+        # print(f"totalGB (bytes): {updated_client.client['totalGB']}")
+        # print(f"enable: {updated_client.client['enable']}")
+
+        # тест 4 (get_client_subscription_link)
+        sub_link: str = await session.get_client_subscription_link(email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1")
+
+        print(f"sub_link: {sub_link}")
 
 
 if __name__ == "__main__":

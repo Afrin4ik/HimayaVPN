@@ -597,3 +597,37 @@ class AsyncXUI:
             raw_response=updated_client.raw_response,
             traffic_reset_response=traffic_reset_response,
         )
+
+    async def get_client_subscription_link(
+            self,
+            email: str,
+            *,
+            subscription_base_url: str = "https://89.125.86.144:2096/",
+            subscription_path: str = "/j1xZ_Iocl3BLOvXUppYq/",
+    ) -> str:
+        if not isinstance(email, str):
+            raise XUIException("email must be a str")
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        if not isinstance(subscription_base_url, str):
+            raise XUIException("subscription_base_url must be a str")
+        if not subscription_base_url.strip():
+            raise XUIException("subscription_base_url cannot be empty")
+
+        if not isinstance(subscription_path, str):
+            raise XUIException("subscription_path must be a str")
+        if not subscription_path.strip():
+            raise XUIException("subscription_path cannot be empty")
+
+        obj: dict[str, Any] = await self.get_client_by_email(email=email)
+        client, _ = self._extract_client_payload(obj=obj)
+
+        sub_id = client.get("subId")
+        if not isinstance(sub_id, str) or not sub_id.strip():
+            raise XUIException(f"Client {email} does not have subId")
+
+        base: str = subscription_base_url.strip("/")
+        path: str = subscription_path.strip("/")
+
+        return f"{base}/{path}/{self._quote_path(path=sub_id)}"
