@@ -1,0 +1,40 @@
+services:
+  db:
+    container_name: postgres_himaya_vpn
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - ${DB_HOST_PORT}:5432
+    volumes:
+      - himaya_vpn_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - himaya_vpn_network
+    mem_limit: 512M
+    mem_reservation: 256M
+    cpus: "1"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  himaya_vpn_network:
+    name: himaya_vpn_network
+    driver: bridge
+
+volumes:
+  himaya_vpn_data:
+    name: himaya_vpn_data
+    driver: local
