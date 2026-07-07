@@ -17,6 +17,11 @@ async def main():
         base_url=settings.xui_base_url,
         web_base_path=settings.xui_web_base_path,
         api_token=settings.xui_api_token,
+        subscription_base_url=settings.xui_subscription_base_url,
+        subscription_path=settings.xui_subscription_path,
+        default_inbound_ids=settings.xui_default_inbound_ids,
+        default_limit_ip=settings.xui_default_limit_ip,
+        default_total_gb=settings.xui_default_total_gb,
     )
 
     async with AsyncXUI(config=config) as session:
@@ -71,10 +76,28 @@ async def main():
         # print(f"enable: {updated_client.client['enable']}")
 
         # тест 4 (get_client_subscription_link)
-        sub_link: str = await session.get_client_subscription_link(email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1")
+        # sub_link: str = await session.get_client_subscription_link(email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1")
 
+        # print(f"sub_link: {sub_link}")
+
+        # тест 5 (add_client; get_client_subscription_link)
+        client: CreatedXUIClient = await session.add_client(
+            email="python_test_5",
+            expiry_days=20,
+        )
+        sub_link: str = await session.get_client_subscription_link(email=client.email)
+
+        print("Client info:")
+        print(f"email: {client.email}")
+        print(f"uuid: {client.uuid}")
+        print(f"password: {client.password}")
+        print(f"hysteria_auth: {client.hysteria_auth}")
+        print(f"sub_id: {client.sub_id}")
+        print(f"inbound_ids: {client.inbound_ids}")
+        print(f"raw_response:\n{client.raw_response}")
+        print("Sub_link info:")
         print(f"sub_link: {sub_link}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main=main())

@@ -14,6 +14,11 @@ class XUIConfig:
     base_url: str
     web_base_path: str
     api_token: str
+    subscription_base_url: str
+    subscription_path: str
+    default_inbound_ids: list[int]
+    default_limit_ip: int
+    default_total_gb: int
 
 
 @dataclass(frozen=True)
@@ -365,27 +370,41 @@ class AsyncXUI:
                 raw_response=data,
             )
 
-    async def add_one_client(
+    async def add_client(
             self,
-            inbound_id: int,
             email: str,
             *,
+            inbound_ids: list[int] | None = None,
             flow: str = "",
-            limit_ip: int = 0,
-            total_gb: int = 0,
+            limit_ip: int | None = None,
+            total_gb: int | None = None,
             expiry_days: int = 0,
             enable: bool = True,
             tg_id: int = 0,
             comment: str = "",
             group: str = "",
     ) -> CreatedXUIClient:
+        if inbound_ids is None:
+            target_inbound_ids: list[int] = self.config.default_inbound_ids
+        else:
+            target_inbound_ids: list[int] = inbound_ids
+
+        if limit_ip is None:
+            target_limit_ip: int = self.config.default_limit_ip
+        else:
+            target_limit_ip: int = limit_ip
+
+        if total_gb is None:
+            target_total_gb: int = self.config.default_total_gb
+        else:
+            target_total_gb: int = total_gb
 
         return await self.add_client_to_inbounds(
-            inbound_ids=[inbound_id],
+            inbound_ids=target_inbound_ids,
             email=email,
             flow=flow,
-            limit_ip=limit_ip,
-            total_gb=total_gb,
+            limit_ip=target_limit_ip,
+            total_gb=target_total_gb,
             expiry_days=expiry_days,
             enable=enable,
             tg_id=tg_id,
@@ -520,9 +539,9 @@ class AsyncXUI:
             updated_client["reset"] = reset
 
         if inbound_ids is not None:
-            target_inbound_ids = inbound_ids
+            target_inbound_ids: list[int] = inbound_ids
         else:
-            target_inbound_ids = current_inbound_ids
+            target_inbound_ids: list[int] = current_inbound_ids
 
         data: dict[str, Any] = await self._post_update_client_payload(
             email=email,
@@ -601,14 +620,14 @@ class AsyncXUI:
     async def get_client_subscription_link(
             self,
             email: str,
-            *,
-            subscription_base_url: str = "https://89.125.86.144:2096/",
-            subscription_path: str = "/j1xZ_Iocl3BLOvXUppYq/",
     ) -> str:
         if not isinstance(email, str):
             raise XUIException("email must be a str")
         if not email.strip():
             raise XUIException("email cannot be empty")
+
+        subscription_base_url: str = self.config.subscription_base_url
+        subscription_path: str = self.config.subscription_path
 
         if not isinstance(subscription_base_url, str):
             raise XUIException("subscription_base_url must be a str")
