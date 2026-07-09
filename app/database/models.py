@@ -74,6 +74,7 @@ class Tariff(Base, TimestampMixin):
     total_gb: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
 
+    vpn_keys: Mapped[list["VpnKey"]] = relationship(back_populates="tariff")
     orders: Mapped[list["Order"]] = relationship(back_populates="tariff")
 
 
@@ -97,11 +98,16 @@ class VpnKey(Base, TimestampMixin):
     inbound_ids: Mapped[list[int]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"), nullable=False)
 
     status: Mapped[str] = mapped_column(String(16), server_default=VPN_KEY_CREATING, nullable=False)
+
+    tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="SET NULL"))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     subscription_url: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
+
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")
+    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_key")
 
 
 class Order(Base, TimestampMixin):

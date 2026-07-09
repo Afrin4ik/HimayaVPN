@@ -1,8 +1,8 @@
 """create initial tables
 
-Revision ID: a47a00edcc48
+Revision ID: 44cf0bfc76c1
 Revises:
-Create Date: 2026-07-10 00:40:34.439900
+Create Date: 2026-07-10 01:54:31.727293
 
 """
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "a47a00edcc48"
+revision: str = "44cf0bfc76c1"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -144,6 +144,7 @@ def upgrade() -> None:
             server_default="creating",
             nullable=False,
         ),
+        sa.Column("tariff_id", sa.Integer(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("subscription_url", sa.Text(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -162,6 +163,9 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status in ('creating', 'active', 'failed', 'disabled')",
             name="ck_vpn_keys_status",
+        ),
+        sa.ForeignKeyConstraint(
+            ["tariff_id"], ["tariffs.id"], ondelete="SET NULL"
         ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
