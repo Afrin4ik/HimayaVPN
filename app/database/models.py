@@ -19,9 +19,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.database.base import Base
 
 
+VPN_KEY_CREATING = "creating"
 VPN_KEY_ACTIVE = "active"
+VPN_KEY_FAILED = "failed"
 VPN_KEY_DISABLED = "disabled"
-VPN_KEY_DELETED = "deleted"
 
 ORDER_CREATED = "created"
 ORDER_PAID = "paid"
@@ -53,6 +54,8 @@ class User(Base, TimestampMixin):
     username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    is_bot: Mapped[str] = mapped_column(Boolean, server_default="false", nullable=False)
 
     vpn_key: Mapped["VpnKey | None"] = relationship(back_populates="user", uselist=False)
     orders: Mapped[list["Order"]] = relationship(back_populates="user")
@@ -79,24 +82,23 @@ class VpnKey(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_vpn_keys_user_id"),
         CheckConstraint(
-            sqltext="status in ('active', 'disabled', 'deleted')",
+            sqltext="status in ('creating', 'active', 'failed', 'disabled')",
             name="ck_vpn_keys_status",
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), unique=True, nullable=False)
 
-    status: Mapped[str] = mapped_column(String(16), server_default=VPN_KEY_ACTIVE, nullable=False)
-
-    xui_email: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
-    xui_uuid: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    xui_sub_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    xui_email: Mapped[str | None] = mapped_column(String(320), unique=True, nullable=True)
+    xui_uuid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    xui_sub_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     inbound_ids: Mapped[list[int]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"), nullable=False)
 
-    subscription_url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), server_default=VPN_KEY_CREATING, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_url: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")
@@ -113,10 +115,10 @@ class Order(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), nullable=False)
     tariff_id: Mapped[int] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=False)
 
-    price_rub: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_rub: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), server_default=ORDER_CREATED, nullable=False)
 
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
