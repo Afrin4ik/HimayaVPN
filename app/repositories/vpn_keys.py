@@ -36,26 +36,6 @@ class VpnKeyRepository:
         await self.session.flush()
         return key
 
-    async def set_creating(
-            self,
-            *,
-            vpn_key_id: int,
-            tariff_id: int,
-    ) -> VpnKey:
-        stmt = (
-            update(table=VpnKey)
-            .where(VpnKey.id == vpn_key_id)
-            .values(
-                tariff_id=tariff_id,
-                status=VPN_KEY_CREATING,
-                error_message=None,
-                updated_at=func.now(),
-            )
-            .returning(VpnKey)
-        )
-        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
-        return result.scalar_one()
-
     async def activate(
             self,
             *,
@@ -78,6 +58,26 @@ class VpnKeyRepository:
                 inbound_ids=inbound_ids,
                 subscription_url=subscription_url,
                 expires_at=expires_at,
+                error_message=None,
+                updated_at=func.now(),
+            )
+            .returning(VpnKey)
+        )
+        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
+        return result.scalar_one()
+
+    async def set_creating(
+            self,
+            *,
+            vpn_key_id: int,
+            tariff_id: int,
+    ) -> VpnKey:
+        stmt = (
+            update(table=VpnKey)
+            .where(VpnKey.id == vpn_key_id)
+            .values(
+                tariff_id=tariff_id,
+                status=VPN_KEY_CREATING,
                 error_message=None,
                 updated_at=func.now(),
             )
