@@ -24,12 +24,16 @@ class UserRepository:
             username: str | None,
             first_name: str | None,
             last_name: str | None,
+            language_code: str | None,
+            is_bot: bool,
     ) -> User:
         values = {
             "telegram_id": telegram_id,
             "username": username,
             "first_name": first_name,
             "last_name": last_name,
+            "language_code": language_code,
+            "is_bot": is_bot,
         }
 
         stmt = insert(table=User).values(**values)
