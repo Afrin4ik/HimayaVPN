@@ -63,7 +63,7 @@ class VpnKeyService:
             created_xui_client: CreatedXUIClient = await self.xui.add_client(
                 email=f"tg_{user.telegram_id}",
                 inbound_ids=self.xui_config.default_inbound_ids,
-                limit_ip=self.xui_config.default_limit_ip,
+                limit_ip=selected_tariff.limit_ip,
                 total_gb=selected_tariff.total_gb,
                 expiry_days=selected_tariff.duration_days,
                 tg_id=user.telegram_id,
