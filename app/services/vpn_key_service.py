@@ -1,3 +1,5 @@
+import logging
+
 from datetime import datetime, timedelta, timezone
 
 from aiogram.types import User as TelegramUser
@@ -9,6 +11,9 @@ from app.database.models import User, Tariff, VpnKey, VPN_KEY_CREATING, VPN_KEY_
 from app.repositories.tariffs import TariffRepository
 from app.repositories.vpn_keys import VpnKeyRepository
 from app.services.user_service import UserService
+
+
+logger = logging.getLogger(__name__)
 
 
 class VpnKeyService:
@@ -59,6 +64,9 @@ class VpnKeyService:
                     return existing_vpn_key
                 raise
 
+        created_xui_client: CreatedXUIClient | None = None
+        database_commit_started = False
+
         try:
             created_xui_client: CreatedXUIClient = await self.xui.add_client(
                 email=f"tg_{user.telegram_id}",
@@ -83,12 +91,61 @@ class VpnKeyService:
                 subscription_url=subscription_url,
                 expires_at=expires_at,
             )
+
+            database_commit_started = True
             await self.session.commit()
+
             return vpn_key
-        except Exception as exc:
-            await self.vpn_keys_repository.mark_failed(
-                vpn_key_id=placeholder.id,
-                error_message=str(exc),
+
+        except Exception as original_exc:
+            logger.exception(
+                "VPN key creation failed: user_id=%s, telegram_id=%s",
+                user.id,
+                user.telegram_id,
             )
-            await self.session.commit()
+
+            await self.session.rollback()
+
+            cleanup_error: Exception | None = None
+
+            if (created_xui_client is not None and not database_commit_started):
+                try:
+                    await self.xui.delete_client(
+                        email=created_xui_client.email,
+                        keep_traffic=False,
+                    )
+
+                    logger.info(
+                        "Compensation completed: deleted XUI client (email: %s)",
+                        created_xui_client.email,
+                    )
+
+                except Exception as exc:
+                    cleanup_error = exc
+
+                    logger.exception(
+                        "Compensation failed: cannot delete XUI client (email: %s)",
+                        created_xui_client.email,
+                    )
+
+            error_message: str = f"{type(original_exc).__name__}: {original_exc}"
+
+            if cleanup_error is not None:
+                error_message += f"; cleanup failed: {type(cleanup_error).__name__}: {cleanup_error}"
+
+            try:
+                await self.vpn_keys_repository.mark_failed(
+                    vpn_key_id=placeholder.id,
+                    error_message=error_message,
+                )
+                await self.session.commit()
+
+            except Exception:
+                await self.session.rollback()
+
+                logger.exception(
+                    "Cannot mark VPN key %s as failed",
+                    placeholder.id,
+                )
+
             raise
