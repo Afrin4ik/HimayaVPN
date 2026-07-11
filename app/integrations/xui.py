@@ -412,6 +412,37 @@ class AsyncXUI:
             group=group,
         )
 
+    async def delete_client(
+            self,
+            email: str,
+            *,
+            keep_traffic: bool = False,
+    ) -> dict[str, Any]:
+        if not isinstance(email, str):
+            raise XUIException("email must be a str")
+        if not email.strip():
+            raise XUIException("email cannot be empty")
+
+        if not isinstance(keep_traffic, bool):
+            raise XUIException("keep_traffic must be a bool")
+
+        session: aiohttp.ClientSession = self._require_session()
+
+        params: dict[str, str] = {}
+        if keep_traffic:
+            params["keepTraffic"] = "1"
+
+        async with session.post(
+            url=self._url(path=f"/panel/api/clients/del/{self._quote_path(path=email)}"),
+            params=params,
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+        if not data.get("success", False):
+            raise XUIException(f"Cannot delete client {email}: {data}")
+
+        return data
+
     async def get_client_by_email(self, email: str) -> dict[str, Any]:
         if not email.strip():
             raise XUIException("email cannot be empty")
@@ -449,7 +480,7 @@ class AsyncXUI:
     ) -> UpdatedXUIClient:
         if not isinstance(email, str):
             raise XUIException("email must be an str")
-        elif not email.strip():
+        if not email.strip():
             raise XUIException("email cannot be empty")
 
         if inbound_ids is not None:

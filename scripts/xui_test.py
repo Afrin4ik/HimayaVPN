@@ -81,22 +81,29 @@ async def main():
         # print(f"sub_link: {sub_link}")
 
         # тест 5 (add_client; get_client_subscription_link)
-        client: CreatedXUIClient = await session.add_client(
-            email="python_test_5",
-            expiry_days=20,
-        )
-        sub_link: str = await session.get_client_subscription_link(email=client.email)
+        # client: CreatedXUIClient = await session.add_client(
+        #     email="python_test_5",
+        #     expiry_days=20,
+        # )
+        # sub_link: str = await session.get_client_subscription_link(email=client.email)
 
-        print("Client info:")
-        print(f"email: {client.email}")
-        print(f"uuid: {client.uuid}")
-        print(f"password: {client.password}")
-        print(f"hysteria_auth: {client.hysteria_auth}")
-        print(f"sub_id: {client.sub_id}")
-        print(f"inbound_ids: {client.inbound_ids}")
-        print(f"raw_response:\n{client.raw_response}")
-        print("Sub_link info:")
-        print(f"sub_link: {sub_link}")
+        # print("Client info:")
+        # print(f"email: {client.email}")
+        # print(f"uuid: {client.uuid}")
+        # print(f"password: {client.password}")
+        # print(f"hysteria_auth: {client.hysteria_auth}")
+        # print(f"sub_id: {client.sub_id}")
+        # print(f"inbound_ids: {client.inbound_ids}")
+        # print(f"raw_response:\n{client.raw_response}")
+        # print("Sub_link info:")
+        # print(f"sub_link: {sub_link}")
+
+        # тест 6 (delete_client)
+        data: dict[str, Any] = await session.delete_client(
+            email="python_test_2_5e001dc6-4632-4e59-95b3-5a16dd88636e",
+        )
+
+        print(f"data:\n{data}")
 
 
 if __name__ == "__main__":
