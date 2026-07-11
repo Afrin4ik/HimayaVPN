@@ -20,6 +20,15 @@ class VpnKeyRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_all_xui_emails(self) -> set[str]:
+        result: Result[Tuple[str | None]] = await self.session.execute(
+            statement=select(VpnKey.xui_email).where(
+                VpnKey.xui_email.is_not(None)
+            )
+        )
+
+        return set(email for email in result.scalars().all() if email is not None)
+
     async def create_placeholder(
             self,
             *,
