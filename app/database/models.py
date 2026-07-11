@@ -55,7 +55,7 @@ class User(Base, TimestampMixin):
     first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    is_bot: Mapped[str] = mapped_column(Boolean, server_default="false", nullable=False)
+    is_bot: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
 
     vpn_key: Mapped["VpnKey | None"] = relationship(back_populates="user", uselist=False)
     orders: Mapped[list["Order"]] = relationship(back_populates="user")
@@ -107,7 +107,7 @@ class VpnKey(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")
-    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_key")
+    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_keys")
 
 
 class Order(Base, TimestampMixin):
