@@ -26,7 +26,6 @@ class VpnKeyRepository:
                 VpnKey.xui_email.is_not(None)
             )
         )
-
         return set(email for email in result.scalars().all() if email is not None)
 
     async def create_placeholder(
