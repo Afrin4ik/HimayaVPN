@@ -1,3 +1,5 @@
+import logging
+
 import asyncio
 
 from aiogram import Bot, Dispatcher
@@ -28,7 +30,7 @@ async def main() -> None:
     await xui.start()
 
     dp = Dispatcher()
-    dp["settings"] = settings
+    dp["xui_config"] = xui_config
     dp["xui"] = xui
     dp.update.middleware(middleware=DatabaseSessionMiddleware(session_factory=async_session_factory))
     dp.include_router(router=router)
@@ -41,4 +43,9 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s,%(msecs)03d | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     asyncio.run(main=main())
