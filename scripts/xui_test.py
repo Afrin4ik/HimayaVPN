@@ -28,6 +28,7 @@ async def main():
         # await session.login()
 
 
+
         # тест 1 (get inbounds)
         # inbounds: list[dict[str, Any]] = await session.get_inbounds()
         # for inbound in inbounds:
@@ -37,6 +38,7 @@ async def main():
         #         inbound.get("protocol"),
         #         inbound.get("port")
         #     )
+
 
 
         # тест 2 (add client to inbounds)
@@ -58,6 +60,7 @@ async def main():
         # print(f"raw_response:\n{client.raw_response}")
 
 
+
         # тест 3 (update client data; renew client)
         # updated_client: UpdatedXUIClient = await session.renew_client(
         #     email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1",
@@ -75,10 +78,14 @@ async def main():
         # print(f"totalGB (bytes): {updated_client.client['totalGB']}")
         # print(f"enable: {updated_client.client['enable']}")
 
+
+
         # тест 4 (get_client_subscription_link)
         # sub_link: str = await session.get_client_subscription_link(email="python_test_b7935034-a0ca-4da1-a30b-eb1e7d8653f1")
 
         # print(f"sub_link: {sub_link}")
+
+
 
         # тест 5 (add_client; get_client_subscription_link)
         # client: CreatedXUIClient = await session.add_client(
@@ -98,12 +105,24 @@ async def main():
         # print("Sub_link info:")
         # print(f"sub_link: {sub_link}")
 
-        # тест 6 (delete_client)
-        data: dict[str, Any] = await session.delete_client(
-            email="python_test_2_5e001dc6-4632-4e59-95b3-5a16dd88636e",
-        )
 
-        print(f"data:\n{data}")
+
+        # тест 6 (delete_client)
+        # data: dict[str, Any] = await session.delete_client(
+        #     email="python_test_2_5e001dc6-4632-4e59-95b3-5a16dd88636e",
+        # )
+
+        # print(f"data:\n{data}")
+
+
+
+        # тест 7 (get_clients_list)
+        clients: list[dict[str, Any]] = await session.get_clients_list()
+
+        # print(f"Clients: {clients}")
+        for i in range(len(clients)):
+            print(f"Client {i + 1}:\n{clients[i]}")
+            print("-" * 15)
 
 
 if __name__ == "__main__":

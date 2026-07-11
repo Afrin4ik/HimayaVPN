@@ -262,6 +262,26 @@ class AsyncXUI:
 
             return obj
 
+    async def get_clients_list(self) -> list[dict[str, Any]]:
+        session: aiohttp.ClientSession = self._require_session()
+
+        async with session.get(
+            url=self._url(path="/panel/api/clients/list")
+        ) as response:
+            data: dict[str, Any] = await self._read_json_response(response=response)
+
+            if not data.get("success", False):
+                raise XUIException(f"Cannot get clients list: {data}")
+
+            clients: list[dict[str, Any]] = data.get("obj", [])
+            if not isinstance(clients, list):
+                raise XUIException(f"Unexpected clients list payload: {data}")
+
+            if not all(isinstance(client, dict) for client in clients):
+                raise XUIException(f"Unexpected client item in payload: {data}")
+
+        return clients
+
     async def add_client_to_inbounds(
             self,
             inbound_ids: list[int],
