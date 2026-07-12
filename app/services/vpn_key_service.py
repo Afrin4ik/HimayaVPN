@@ -79,36 +79,68 @@ class VpnKeyService:
             raise ValueError("No tariff found or tariff disabled")
 
         existing_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
-        if existing_vpn_key and existing_vpn_key.status == VPN_KEY_ACTIVE:
+
+        recovering_stale_creation = False
+
+        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_ACTIVE:
             return existing_vpn_key
-        if existing_vpn_key and existing_vpn_key.status == VPN_KEY_CREATING:
-            raise RuntimeError("The VPN key is currently being created. Please try again in a minute")
-        if existing_vpn_key and existing_vpn_key.status == VPN_KEY_DISABLED:
+
+        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_DISABLED:
             raise RuntimeError("A disabled VPN key already exists for this user")
-        if existing_vpn_key and existing_vpn_key.status == VPN_KEY_FAILED:
-            placeholder: VpnKey = await self.vpn_keys_repository.set_creating(
+
+        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_CREATING:
+            stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
+
+            placeholder: VpnKey | None = await self.vpn_keys_repository.claim_stale_creating(
+                vpn_key_id=existing_vpn_key.id,
+                tariff_id=selected_tariff.id,
+                stale_before=stale_before,
+            )
+
+            if placeholder is None:
+                await self.session.rollback()
+                raise RuntimeError("The VPN key is currently begin created. Please try again later")
+
+            await self.session.commit()
+            recovering_stale_creation = True
+
+            logger.warning(
+                "Claimed stale VPN key creation: "
+                "vpn_key_id=%s, user_id=%s, telegram_id=%s, previous_updated_at=%s",
+                placeholder.id, user.id, user.telegram_id, existing_vpn_key.updated_at,
+            )
+
+        elif existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_FAILED:
+            placeholder = await self.vpn_keys_repository.set_creating(
                 vpn_key_id=existing_vpn_key.id,
                 tariff_id=selected_tariff.id,
             )
             await self.session.commit()
+
         else:
             try:
-                placeholder: VpnKey = await self.vpn_keys_repository.create_placeholder(
+                placeholder = await self.vpn_keys_repository.create_placeholder(
                     user_id=user.id,
                     tariff_id=selected_tariff.id,
                 )
                 await self.session.commit()
+
             except IntegrityError:
                 await self.session.rollback()
-                existing_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
-                if existing_vpn_key is not None:
-                    return existing_vpn_key
+
+                concurrent_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
+                if concurrent_vpn_key is not None:
+                    raise RuntimeError("VPN key creation was started by another request")
+
                 raise
 
         created_xui_client: CreatedXUIClient | None = None
         database_commit_started = False
 
         try:
+            if recovering_stale_creation:
+                await self._delete_untracked_xui_clients_for_user(telegram_id=user.telegram_id)
+
             created_xui_client: CreatedXUIClient = await self.xui.add_client(
                 email=f"tg_{user.telegram_id}",
                 inbound_ids=self.xui_config.default_inbound_ids,
