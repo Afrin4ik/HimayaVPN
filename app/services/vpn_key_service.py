@@ -1,6 +1,7 @@
 import logging
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from aiogram.types import User as TelegramUser
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +28,43 @@ class VpnKeyService:
         self.tariffs_repository = TariffRepository(session=session)
         self.vpn_keys_repository = VpnKeyRepository(session=session)
         self.user_service = UserService(session=session)
+
+    async def _delete_untracked_xui_clients_for_user(
+            self,
+            *,
+            telegram_id: int,
+    ) -> None:
+        email_prefix = f"tg_{telegram_id}_"
+
+        xui_clients: list[dict[str, Any]] = await self.xui.get_clients_list()
+
+        matching_emails: list[str] = []
+
+        for xui_client in xui_clients:
+            email = xui_client.get("email")
+            if not isinstance(email, str):
+                continue
+
+            if email.startswith(email_prefix):
+                matching_emails.append(email)
+
+        for email in matching_emails:
+            logger.warning(
+                "Deleting stale XUI client before retry: telegram_id=%s, email=%s",
+                telegram_id,
+                email,
+            )
+
+            await self.xui.delete_client(
+                email=email,
+                keep_traffic=False,
+            )
+
+            logger.info(
+                "Deleted stale XUI client: telegram_id=%s, email=%s",
+                telegram_id,
+                email,
+            )
 
     async def get_or_create_vpn_key_for_user(
             self,
