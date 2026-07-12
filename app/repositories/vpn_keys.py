@@ -94,6 +94,40 @@ class VpnKeyRepository:
         result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
         return result.scalar_one()
 
+    async def claim_stale_creating(
+            self,
+            *,
+            vpn_key_id: int,
+            tariff_id: int,
+            stale_before: datetime,
+    ) -> VpnKey | None:
+        stmt = (
+            update(table=VpnKey)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_CREATING,
+                VpnKey.updated_at <= stale_before,
+            )
+            .values(
+                tariff_id=tariff_id,
+                status=VPN_KEY_CREATING,
+                xui_email=None,
+                xui_uuid=None,
+                xui_sub_id=None,
+                inbound_ids=[],
+                subscription_url=None,
+                expires_at=None,
+                error_message=None,
+                updated_at=func.now(),
+            )
+            .returning(VpnKey)
+        )
+
+        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
+
+        return result.scalar_one_or_none()
+
+
     async def mark_failed(
             self,
             *,

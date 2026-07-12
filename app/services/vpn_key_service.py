@@ -16,6 +16,9 @@ from app.services.user_service import UserService
 logger = logging.getLogger(__name__)
 
 
+VPN_KEY_CREATING_TIMEOUT = timedelta(minutes=2)
+
+
 class VpnKeyService:
     def __init__(self, session: AsyncSession, xui: AsyncXUI, xui_config: XUIConfig) -> None:
         self.session: AsyncSession = session
