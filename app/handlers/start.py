@@ -31,7 +31,7 @@ async def cmd_start(message: Message) -> None:
     await message.answer(text=welcome_message)
 
     main_message: LiteralString = (
-        f"Для продолжения работы выбирете действие ниже"
+        f"Для продолжения работы выберите действие ниже"
     )
     await message.answer(text=main_message, reply_markup=get_main_menu_inline_keyboard())
 
@@ -39,6 +39,6 @@ async def cmd_start(message: Message) -> None:
 @router.callback_query(F.data == "back_to_main_menu")
 async def callback_back_to_main_menu(callback: CallbackQuery) -> None:
     main_message: LiteralString = (
-        f"Для продолжения работы выбирете действие ниже"
+        f"Для продолжения работы выберите действие ниже"
     )
     await callback.message.edit_text(text=main_message, reply_markup=get_main_menu_inline_keyboard())

@@ -25,7 +25,7 @@ router = Router()
 @router.callback_query(F.data == "connect_vpn")
 async def callback_connect_vpn(callback: CallbackQuery) -> None:
     connect_vpn_message: LiteralString = (
-        f"📆 Выбирите тариф\n"
+        f"📆 Выберите тариф\n"
     )
 
     tariffs_kd: InlineKeyboardMarkup = get_tariffs_inline_keyboard()
@@ -82,7 +82,7 @@ async def callback_tariff_selected(
         f"✅ VPN-ключ готов!\n\n"
         f"Ваш ключ:\n"
         f"{vpn_key.subscription_url}\n\n"
-        f"Скопируйте ссылку и добавьте её в VPN-клиен"
+        f"Скопируйте ссылку и добавьте её в VPN-клиент"
     )
     await callback.message.edit_text(
         text=success_vpn_key_creating_message,
