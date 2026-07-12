@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import time
+
 from typing import Any
 
 from app.config import Settings, get_settings
@@ -179,6 +180,7 @@ async def reconcile(
         apply_changes,
     )
 
+
 async def main() -> None:
     arguments: argparse.Namespace = parse_arguments()
 
@@ -189,6 +191,7 @@ async def main() -> None:
         )
     finally:
         await close_database()
+
 
 if __name__ == "__main__":
     logging.basicConfig(
