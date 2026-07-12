@@ -165,12 +165,12 @@ async def reconcile(
                 )
 
     logger.info(
-        "Reconciliation finished:\n"
-        "database_emails_count=%s\n"
-        "xui_clients_count=%s\n"
-        "orphan_count=%s\n"
-        "deleted_count=%s\n"
-        "skipped_count=%s\n"
+        "Reconciliation finished: "
+        "database_emails_count=%s, "
+        "xui_clients_count=%s, "
+        "orphan_count=%s, "
+        "deleted_count=%s, "
+        "skipped_count=%s, "
         "apply_changes=%s",
         len(database_emails),
         len(xui_clients_list),
@@ -196,7 +196,7 @@ async def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s,%(msecs)03d | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | message:\n%(message)s",
+        format="%(asctime)s,%(msecs)03d | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
