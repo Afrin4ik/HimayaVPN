@@ -13,6 +13,13 @@ from app.repositories.tariffs import TariffRepository
 from app.repositories.vpn_keys import VpnKeyRepository
 from app.services.user_service import UserService
 
+from app.services.exceptions import (
+    VpnKeyCreationInProgressError,
+    VpnKeyCreationFailedError,
+    VpnKeyDisabledError,
+    VpnKeyInvalidStateError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +35,51 @@ class VpnKeyService:
         self.tariffs_repository = TariffRepository(session=session)
         self.vpn_keys_repository = VpnKeyRepository(session=session)
         self.user_service = UserService(session=session)
+
+    @staticmethod
+    def _require_usable_active_vpn_key(
+        vpn_key: VpnKey,
+    ) -> VpnKey:
+        if vpn_key.status != VPN_KEY_ACTIVE:
+            raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} is not active (status={vpn_key.status})")
+
+        if not isinstance(vpn_key.subscription_url, str) or not vpn_key.subscription_url.strip():
+            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have subscription_url")
+
+        if not isinstance(vpn_key.xui_email, str) or not vpn_key.xui_email.strip():
+            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_email")
+
+        if not isinstance(vpn_key.xui_uuid, str) or not vpn_key.xui_uuid.strip():
+            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_uuid")
+
+        if not isinstance(vpn_key.xui_sub_id, str) or not vpn_key.xui_sub_id.strip():
+            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_sub_id")
+
+        return vpn_key
+
+    def _resolve_vpn_key_after_integrity_error(
+            self,
+            *,
+            vpn_key: VpnKey,
+    ) -> VpnKey:
+        if vpn_key.status == VPN_KEY_ACTIVE:
+            logger.info(
+                "Concurrent VPN key creation already completed (vpn_key_id=%s, user_id=%s)",
+                vpn_key.id,
+                vpn_key.user_id,
+            )
+            return self._require_usable_active_vpn_key(vpn_key=vpn_key)
+
+        if vpn_key.status == VPN_KEY_CREATING:
+            raise VpnKeyCreationInProgressError(f"VPN key {vpn_key.id} is being created by another request")
+
+        if vpn_key.status == VPN_KEY_FAILED:
+            raise VpnKeyCreationFailedError(f"Concurrent VPN key creation failed (vpn_key_id={vpn_key.id}, error={vpn_key.error_message})")
+
+        if vpn_key.status == VPN_KEY_DISABLED:
+            raise VpnKeyDisabledError(f"VPN key {vpn_key.id} is disabled")
+
+        raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} has unexpected status: {vpn_key.status}")
 
     async def _delete_untracked_xui_clients_for_user(
             self,
@@ -83,10 +135,10 @@ class VpnKeyService:
         recovering_stale_creation = False
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_ACTIVE:
-            return existing_vpn_key
+            return self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_DISABLED:
-            raise RuntimeError("A disabled VPN key already exists for this user")
+            raise VpnKeyDisabledError(f"A disabled VPN key {existing_vpn_key.id} already exists for this user")
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_CREATING:
             stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
@@ -99,7 +151,7 @@ class VpnKeyService:
 
             if placeholder is None:
                 await self.session.rollback()
-                raise RuntimeError("The VPN key is currently begin created. Please try again later")
+                raise VpnKeyCreationInProgressError(f"The VPN key {existing_vpn_key.id} is currently being created. Please try again later")
 
             await self.session.commit()
             recovering_stale_creation = True
@@ -128,11 +180,21 @@ class VpnKeyService:
             except IntegrityError:
                 await self.session.rollback()
 
-                concurrent_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
-                if concurrent_vpn_key is not None:
-                    raise RuntimeError("VPN key creation was started by another request")
+                logger.warning(
+                    "Concurrent VPN key placeholder creation detected (user_id=%s, telegram_id=%s)",
+                    user.id,
+                    user.telegram_id,
+                )
 
-                raise
+                concurrent_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
+                if concurrent_vpn_key is None:
+                    logger.error(
+                        "IntegrityError occurred, but VPN key was not found after rollback (user_id=%s)",
+                        user.id,
+                    )
+                    raise
+
+                return self._resolve_vpn_key_after_integrity_error(vpn_key=concurrent_vpn_key)
 
         created_xui_client: CreatedXUIClient | None = None
         database_commit_started = False
@@ -168,7 +230,7 @@ class VpnKeyService:
             database_commit_started = True
             await self.session.commit()
 
-            return vpn_key
+            return self._require_usable_active_vpn_key(vpn_key=vpn_key)
 
         except Exception as original_exc:
             logger.exception(
