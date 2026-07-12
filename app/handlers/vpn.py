@@ -15,6 +15,12 @@ from app.database.models import VpnKey
 from app.services.vpn_key_service import VpnKeyService
 from app.integrations.xui import AsyncXUI, XUIConfig
 
+from app.services.exceptions import (
+    VpnKeyCreationInProgressError,
+    VpnKeyCreationFailedError,
+    VpnKeyDisabledError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +65,52 @@ async def callback_tariff_selected(
             telegram_user=callback.from_user,
             tariff_code=callback.data,
         )
+
+    except VpnKeyCreationInProgressError:
+        await session.rollback()
+
+        vpn_key_creation_in_progress_message: LiteralString = (
+            f"⏳ VPN-ключ уже создаётся...\n\n"
+            f"Подождите немного и попробуйте снова"
+        )
+        await callback.message.edit_text(
+            text=vpn_key_creation_in_progress_message,
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+        return
+
+    except VpnKeyCreationFailedError:
+        await session.rollback()
+
+        logger.warning(
+            "Previous VPN key creation failed (telegram_user_id=%s, tariff_code=%s)",
+            callback.from_user.id,
+            callback.data,
+        )
+
+        vpn_key_creation_failed_message: LiteralString = (
+            f"⛓️‍💥 Не удалось завершить создание VPN-ключа\n\n"
+            f"Попробуйте ещё раз через несколько секунд"
+        )
+        await callback.message.edit_text(
+            text=vpn_key_creation_failed_message,
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+        return
+
+    except VpnKeyDisabledError:
+        await session.rollback()
+
+        vpn_key_disabled_message: LiteralString = (
+            f"Ваш VPN-ключ отключён. Срок действия вашего тарифа истёк ⏱️\n\n"
+            f"Чтобы продолжить использовать VPN-ключ, выберите один из доступных тарифов"
+        )
+        await callback.message.edit_text(
+            text=vpn_key_disabled_message,
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+        return
+
     except Exception:
         logger.exception(
             "Failed to create VPN key: telegram_user_id=%s, tariff_code=%s",
