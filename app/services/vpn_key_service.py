@@ -314,3 +314,91 @@ class VpnKeyService:
                 )
 
             raise
+
+    async def _execute_pending_renewal(
+            self,
+            *,
+            vpn_key: VpnKey,
+            tariff: Tariff,
+    ) -> VpnKey:
+        if vpn_key.status != VPN_KEY_RENEWING:
+            raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} is not renewing")
+
+        if not isinstance(vpn_key.xui_email, str) or not vpn_key.xui_email.strip():
+            raise VpnKeyInvalidStateError(f"Renewing VPN key {vpn_key.id} does not have xui_email")
+
+        if vpn_key.pending_tariff_id is None:
+            raise VpnKeyInvalidStateError(f"Renewing VPN key {vpn_key.id} does not have pending_tariff_id")
+
+        if vpn_key.pending_expires_at is None:
+            raise VpnKeyInvalidStateError(f"Renewing VPN key {vpn_key.id} does not have pending_expires_at")
+
+        target_expires_at: datetime = vpn_key.pending_expires_at
+        target_expiry_time_ms = int(target_expires_at.timestamp() * 1000)
+
+        database_commit_started = False
+
+        try:
+            await self.xui.renew_client_until(
+                email=vpn_key.xui_email,
+                target_expiry_time_ms=target_expiry_time_ms,
+                limit_ip=tariff.limit_ip,
+                total_gb=tariff.total_gb,
+                reset_traffic=True,
+            )
+
+            renewed_vpn_key: VpnKey = await self.vpn_keys_repository.complete_renewal(
+                vpn_key_id=vpn_key.id,
+                tariff_id=tariff.id,
+                expires_at=target_expires_at,
+            )
+
+            database_commit_started = True
+            await self.session.commit()
+
+            logger.info(
+                "VPN key renewal completed (vpn_key_id=%s, tariff_id=%s, expires_at=%s)",
+                renewed_vpn_key.id,
+                tariff.id,
+                renewed_vpn_key.expires_at,
+            )
+
+            return self._require_usable_active_vpn_key(vpn_key=renewed_vpn_key)
+
+        except Exception as original_exc:
+            await self.session.rollback()
+
+            if database_commit_started:
+                refreshed_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=vpn_key.user_id)
+
+                if (
+                    refreshed_vpn_key is not None
+                    and refreshed_vpn_key.status == VPN_KEY_ACTIVE
+                    and refreshed_vpn_key.expires_at is not None
+                    and refreshed_vpn_key.expires_at >= target_expires_at
+                ):
+                    logger.warning(
+                        "Renewal commit returned an error, but database already contains the result (vpn_key_id=%s)",
+                        refreshed_vpn_key.id,
+                    )
+
+                    return self._require_usable_active_vpn_key(vpn_key=refreshed_vpn_key)
+
+            error_message = f"{type(original_exc).__name__}: {original_exc}"
+
+            try:
+                await self.vpn_keys_repository.record_renewal_error(
+                    vpn_key_id=vpn_key.id,
+                    error_message=error_message,
+                )
+                await self.session.commit()
+
+            except Exception:
+                await self.session.rollback()
+
+                logger.exception(
+                    "Cannot record renewal error (vpn_key_id=%s)",
+                    vpn_key.id,
+                )
+
+            raise VpnKeyRenewalFailedError(f"Cannot renew VPN key {vpn_key.id}") from original_exc
