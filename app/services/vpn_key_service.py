@@ -8,7 +8,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.xui import AsyncXUI, CreatedXUIClient, XUIConfig
-from app.database.models import User, Tariff, VpnKey, VPN_KEY_CREATING, VPN_KEY_ACTIVE, VPN_KEY_FAILED, VPN_KEY_DISABLED
+from app.database.models import (
+    User,
+    Tariff,
+    VpnKey,
+    VPN_KEY_CREATING,
+    VPN_KEY_ACTIVE,
+    VPN_KEY_FAILED,
+    VPN_KEY_DISABLED,
+    VPN_KEY_RENEWING,
+)
 from app.repositories.tariffs import TariffRepository
 from app.repositories.vpn_keys import VpnKeyRepository
 from app.services.user_service import UserService
@@ -18,6 +27,8 @@ from app.services.exceptions import (
     VpnKeyCreationFailedError,
     VpnKeyDisabledError,
     VpnKeyInvalidStateError,
+    VpnKeyRenewalInProgressError,
+    VpnKeyRenewalFailedError,
 )
 
 
@@ -25,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 VPN_KEY_CREATING_TIMEOUT = timedelta(minutes=2)
+VPN_KEY_RENEWING_TIMEOUT = timedelta(minutes=2)
 
 
 class VpnKeyService:
@@ -56,6 +68,24 @@ class VpnKeyService:
             raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_sub_id")
 
         return vpn_key
+
+    @staticmethod
+    def _calculate_renewal_expires_at(
+            *,
+            current_expires_at: datetime | None,
+            duration_days: int,
+    ) -> datetime:
+        if duration_days <= 0:
+            raise ValueError("duration_days must be positive")
+
+        now: datetime = datetime.now(timezone.utc)
+
+        if (current_expires_at is not None and current_expires_at > now):
+            base: datetime = current_expires_at
+        else:
+            base: datetime = now
+
+        return base + timedelta(days=duration_days)
 
     def _resolve_vpn_key_after_integrity_error(
             self,
