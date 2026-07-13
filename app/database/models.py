@@ -23,6 +23,7 @@ VPN_KEY_CREATING = "creating"
 VPN_KEY_ACTIVE = "active"
 VPN_KEY_FAILED = "failed"
 VPN_KEY_DISABLED = "disabled"
+VPN_KEY_RENEWING = "renewing"
 
 ORDER_CREATED = "created"
 ORDER_PAID = "paid"
@@ -83,12 +84,12 @@ class VpnKey(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_vpn_keys_user_id"),
         CheckConstraint(
-            sqltext="status in ('creating', 'active', 'failed', 'disabled')",
+            sqltext="status in ('creating', 'active', 'failed', 'disabled', 'renewing')",
             name="ck_vpn_keys_status",
         ),
         CheckConstraint(
             sqltext=(
-                "status <> 'active' OR ("
+                "status NOT IN ('active', 'renewing') OR ("
                 "xui_email IS NOT NULL AND "
                 "btrim(xui_email) <> '' AND "
                 "xui_uuid IS NOT NULL AND "
@@ -100,8 +101,22 @@ class VpnKey(Base, TimestampMixin):
                 "expires_at IS NOT NULL"
                 ")"
             ),
-            name="ck_vpn_keys_active_has_credentials"
-        )
+            name="ck_vpn_keys_active_has_credentials",
+        ),
+        CheckConstraint(
+            sqltext=(
+                "("
+                "status = 'renewing' AND "
+                "pending_tariff_id IS NOT NULL AND "
+                "pending_expires_at IS NOT NULL"
+                ") OR ("
+                "status <> 'renewing' AND "
+                "pending_tariff_id IS NULL AND "
+                "pending_expires_at IS NULL"
+                ")"
+            ),
+            name="ck_vpn_keys_renewing_has_pending_data",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -117,6 +132,9 @@ class VpnKey(Base, TimestampMixin):
 
     tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="SET NULL"))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    pending_tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=True)
+    pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     subscription_url: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
 
