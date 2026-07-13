@@ -16,3 +16,11 @@ class VpnKeyDisabledError(VpnKeyServiceError):
 
 class VpnKeyInvalidStateError(VpnKeyServiceError):
     """VPN key data is inconsistent with its status"""
+
+
+class VpnKeyRenewalInProgressError(VpnKeyServiceError):
+    """VPN key renewal is already in progress"""
+
+
+class VpnKeyRenewalFailedError(VpnKeyServiceError):
+    """VPN key renewal could not be completed"""
