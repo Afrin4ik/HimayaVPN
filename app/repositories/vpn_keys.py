@@ -5,8 +5,14 @@ from sqlalchemy import Result, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import VpnKey, VPN_KEY_CREATING, VPN_KEY_ACTIVE, VPN_KEY_FAILED
-
+from app.database.models import (
+    VpnKey,
+    VPN_KEY_CREATING,
+    VPN_KEY_ACTIVE,
+    VPN_KEY_FAILED,
+    VPN_KEY_DISABLED,
+    VPN_KEY_RENEWING,
+)
 
 class VpnKeyRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -127,6 +133,102 @@ class VpnKeyRepository:
 
         return result.scalar_one_or_none()
 
+    async def begin_renewal(
+            self,
+            *,
+            vpn_key_id: int,
+            pending_tariff_id: int,
+            pending_expires_at: datetime,
+    ) -> VpnKey | None:
+        stmt = (
+            update(table=VpnKey)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status.in_([VPN_KEY_ACTIVE, VPN_KEY_DISABLED]),
+            )
+            .values(
+                status=VPN_KEY_RENEWING,
+                pending_tariff_id=pending_tariff_id,
+                pending_expires_at=pending_expires_at,
+                error_message=None,
+                updated_at=func.now(),
+            )
+            .returning(VpnKey)
+        )
+
+        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
+
+        return result.scalar_one_or_none()
+
+    async def claim_stale_renewing(
+            self,
+            *,
+            vpn_key_id: int,
+            stale_before: datetime,
+    ) -> VpnKey | None:
+        stmt = (
+            update(table=VpnKey)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_RENEWING,
+                VpnKey.updated_at <= stale_before,
+            )
+            .values(
+                updated_at=func.now(),
+            )
+            .returning(VpnKey)
+        )
+
+        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
+
+        return result.scalar_one_or_none()
+
+    async def complete_renewal(
+            self,
+            *,
+            vpn_key_id: int,
+            tariff_id: int,
+            expires_at: datetime,
+    ) -> VpnKey:
+        stmt = (
+            update(table=VpnKey)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_RENEWING,
+            )
+            .values(
+                status=VPN_KEY_ACTIVE,
+                tariff_id=tariff_id,
+                expires_at=expires_at,
+                pending_tariff_id=None,
+                pending_expires_at=None,
+                error_message=None,
+                updated_at=func.now(),
+            )
+            .returning(VpnKey)
+        )
+
+        result: Result[Tuple[VpnKey]] = await self.session.execute(statement=stmt)
+
+        return result.scalar_one()
+
+    async def record_renewal_error(
+            self,
+            *,
+            vpn_key_id: int,
+            error_message: str,
+    ) -> None:
+        await self.session.execute(
+            statement=update(table=VpnKey)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_RENEWING,
+            )
+            .values(
+                error_message=error_message[:2000],
+                updated_at=func.now(),
+            )
+        )
 
     async def mark_failed(
             self,
