@@ -86,6 +86,22 @@ class VpnKey(Base, TimestampMixin):
             sqltext="status in ('creating', 'active', 'failed', 'disabled')",
             name="ck_vpn_keys_status",
         ),
+        CheckConstraint(
+            sqltext=(
+                "status <> 'active' OR ("
+                "xui_email IS NOT NULL AND "
+                "btrim(xui_email) <> '' AND "
+                "xui_uuid IS NOT NULL AND "
+                "btrim(xui_uuid) <> '' AND "
+                "xui_sub_id IS NOT NULL AND "
+                "btrim(xui_sub_id) <> '' AND "
+                "subscription_url IS NOT NULL AND "
+                "btrim(subscription_url) <> '' AND "
+                "expires_at IS NOT NULL"
+                ")"
+            ),
+            name="ck_vpn_keys_active_has_credentials"
+        )
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
