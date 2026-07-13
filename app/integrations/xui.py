@@ -668,6 +668,45 @@ class AsyncXUI:
             traffic_reset_response=traffic_reset_response,
         )
 
+    async def renew_client_until(
+            self,
+            email: str,
+            *,
+            target_expiry_time_ms: int,
+            limit_ip: int,
+            total_gb: int,
+            reset_traffic: bool = True,
+    ) -> UpdatedXUIClient:
+        if not isinstance(target_expiry_time_ms, int):
+            raise XUIException("target_expiry_time_ms must bi an int")
+        if target_expiry_time_ms <= 0:
+            raise XUIException("target_expiry_time_ms must be positive")
+
+        if not isinstance(reset_traffic, bool):
+            raise XUIException("reset_traffic must be a bool")
+
+        updated_client: UpdatedXUIClient = await self.update_client_data(
+            email=email,
+            limit_ip=limit_ip,
+            total_gb=total_gb,
+            expiry_time_ms=target_expiry_time_ms,
+            enable=True,
+        )
+
+        traffic_reset_response: dict[str, Any] | None = None
+
+        if reset_traffic:
+            traffic_reset_response = await self.reset_client_traffic(email=email)
+
+        return UpdatedXUIClient(
+            email=updated_client.email,
+            uuid=updated_client.uuid,
+            inbound_ids=updated_client.inbound_ids,
+            client=updated_client.client,
+            raw_response=updated_client.raw_response,
+            traffic_reset_response=traffic_reset_response,
+        )
+
     async def get_client_subscription_link(
             self,
             email: str,
