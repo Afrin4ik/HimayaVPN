@@ -72,8 +72,7 @@ async def callback_tariff_selected(
         await session.rollback()
 
         vpn_key_creation_in_progress_message: LiteralString = (
-            f"⏳ VPN-ключ уже создаётся...\n\n"
-            f"Подождите немного и попробуйте снова"
+            f"⏳ Немного подождите, VPN-ключ уже создаётся..."
         )
         await callback.message.edit_text(
             text=vpn_key_creation_in_progress_message,
@@ -92,7 +91,7 @@ async def callback_tariff_selected(
 
         vpn_key_creation_failed_message: LiteralString = (
             f"⛓️‍💥 Не удалось завершить создание VPN-ключа\n\n"
-            f"Попробуйте ещё раз через несколько секунд"
+            f"Попробуйте ещё раз через пару минут"
         )
         await callback.message.edit_text(
             text=vpn_key_creation_failed_message,
@@ -117,8 +116,7 @@ async def callback_tariff_selected(
         await session.rollback()
 
         vpn_key_renewal_in_progress_message: LiteralString = (
-            f"⏳ VPN-ключ уже продлевается...\n\n"
-            f"Подождите немного и попробуйте снова"
+            f"⏳ Немного подождите, VPN-ключ уже продлевается..."
         )
         await callback.message.edit_text(
             text=vpn_key_renewal_in_progress_message,
@@ -137,7 +135,7 @@ async def callback_tariff_selected(
 
         vpn_key_renewal_failed_message: LiteralString = (
             f"⛓️‍💥 Не удалось завершить продление VPN-ключа\n\n"
-            f"Попробуйте ещё раз через несколько секунд"
+            f"Попробуйте ещё раз через пару минут"
         )
         await callback.message.edit_text(
             text=vpn_key_renewal_failed_message,
@@ -166,6 +164,8 @@ async def callback_tariff_selected(
 
     success_vpn_key_creating_message: LiteralString = (
         f"✅ VPN-ключ готов!\n\n"
+        f"Действует до:\n"
+        f"{vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"
         f"Ваш ключ:\n"
         f"{vpn_key.subscription_url}\n\n"
         f"Скопируйте ссылку и добавьте её в VPN-клиент"
