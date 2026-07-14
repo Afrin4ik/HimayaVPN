@@ -19,6 +19,8 @@ from app.services.exceptions import (
     VpnKeyCreationInProgressError,
     VpnKeyCreationFailedError,
     VpnKeyDisabledError,
+    VpnKeyRenewalInProgressError,
+    VpnKeyRenewalFailedError,
 )
 
 
@@ -107,6 +109,38 @@ async def callback_tariff_selected(
         )
         await callback.message.edit_text(
             text=vpn_key_disabled_message,
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+        return
+
+    except VpnKeyRenewalInProgressError:
+        await session.rollback()
+
+        vpn_key_renewal_in_progress_message: LiteralString = (
+            f"⏳ VPN-ключ уже продлевается...\n\n"
+            f"Подождите немного и попробуйте снова"
+        )
+        await callback.message.edit_text(
+            text=vpn_key_renewal_in_progress_message,
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+        return
+
+    except VpnKeyRenewalFailedError:
+        await session.rollback()
+
+        logger.warning(
+            "VPN key renewal failed (telegram_user_id=%s, tariff_code=%s)",
+            callback.from_user.id,
+            callback.data,
+        )
+
+        vpn_key_renewal_failed_message: LiteralString = (
+            f"⛓️‍💥 Не удалось завершить продление VPN-ключа\n\n"
+            f"Попробуйте ещё раз через несколько секунд"
+        )
+        await callback.message.edit_text(
+            text=vpn_key_renewal_failed_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
         return
