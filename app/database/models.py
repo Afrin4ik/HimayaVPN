@@ -75,7 +75,7 @@ class Tariff(Base, TimestampMixin):
     total_gb: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
 
-    vpn_keys: Mapped[list["VpnKey"]] = relationship(back_populates="tariff")
+    vpn_keys: Mapped[list["VpnKey"]] = relationship(back_populates="tariff", foreign_keys="VpnKey.tariff_id")
     orders: Mapped[list["Order"]] = relationship(back_populates="tariff")
 
 
@@ -141,7 +141,7 @@ class VpnKey(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")
-    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_keys")
+    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_keys", foreign_keys=[tariff_id])
 
 
 class Order(Base, TimestampMixin):
