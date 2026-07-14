@@ -374,6 +374,54 @@ class VpnKeyService:
 
             raise
 
+    async def resume_stale_renewal(
+            self,
+            *,
+            vpn_key_id: int,
+            stale_before: datetime,
+    ) -> VpnKey | None:
+        renewal: VpnKey | None = await self.vpn_keys_repository.claim_stale_renewing(
+            vpn_key_id=vpn_key_id,
+            stale_before=stale_before,
+        )
+
+        if renewal is None:
+            await self.session.rollback()
+            return None
+
+        await self.session.commit()
+
+        if renewal.pending_tariff_id is None:
+            raise VpnKeyInvalidStateError(f"Renewing VPN key {renewal.id} does not have pending_tariff_id")
+
+        if renewal.pending_expires_at is None:
+            raise VpnKeyInvalidStateError(f"Renewing VPN key {renewal.id} does not have pending_expires_at")
+
+        pending_tariff: Tariff | None = await self.tariffs_repository.get_tariff_by_id(tariff_id=renewal.pending_tariff_id)
+
+        if pending_tariff is None:
+            error_message = f"Pending tariff {renewal.pending_tariff_id} was not found"
+
+            await self.vpn_keys_repository.record_renewal_error(
+                vpn_key_id=renewal.id,
+                error_message=error_message,
+            )
+            await self.session.commit()
+
+            raise VpnKeyInvalidStateError(error_message)
+
+        logger.warning(
+            "Resuming stale VPN key renewal (vpn_key_id=%s, tariff_id=%s, target_expires_at=%s)",
+            renewal.id,
+            pending_tariff.id,
+            renewal.pending_expires_at,
+        )
+
+        return await self._execute_pending_renewal(
+            vpn_key=renewal,
+            tariff=pending_tariff,
+        )
+
     async def _execute_pending_renewal(
             self,
             *,
