@@ -9,7 +9,7 @@ from app.handlers import router
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.middlewares.database import DatabaseSessionMiddleware
-from app.services.renewal_reconciliation import run_renewal_reconciler
+from app.workers.renewal_reconciler import run_renewal_reconciler
 
 from contextlib import suppress
 
