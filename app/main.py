@@ -9,6 +9,9 @@ from app.handlers import router
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.middlewares.database import DatabaseSessionMiddleware
+from app.services.renewal_reconciliation import run_renewal_reconciler
+
+from contextlib import suppress
 
 
 async def main() -> None:
@@ -35,9 +38,23 @@ async def main() -> None:
     dp.update.middleware(middleware=DatabaseSessionMiddleware(session_factory=async_session_factory))
     dp.include_router(router=router)
 
+    reconciler_task: asyncio.Task[None] = asyncio.create_task(
+        coro=run_renewal_reconciler(
+            session_factory=async_session_factory,
+            xui=xui,
+            xui_config=xui_config,
+        ),
+        name="vpn-renewal-reconciler",
+    )
+
     try:
         await dp.start_polling(bot)
     finally:
+        reconciler_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await reconciler_task
+
         await xui.close()
         await close_database()
 
