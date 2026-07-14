@@ -18,3 +18,15 @@ class TariffRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_tariff_by_id(
+            self,
+            tariff_id: int,
+    ) -> Tariff | None:
+        result: Result[Tuple[Tariff]] = await self.session.execute(
+            statement=select(Tariff).where(
+                Tariff.id == tariff_id
+            )
+        )
+
+        return result.scalar_one_or_none()
