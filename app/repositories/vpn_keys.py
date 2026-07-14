@@ -160,6 +160,27 @@ class VpnKeyRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_stale_renewing_ids(
+            self,
+            *,
+            stale_before: datetime,
+            limit: int = 50,
+    ) -> list[int]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        result: Result[Tuple[int]] = await self.session.execute(
+            statement=select(VpnKey.id)
+            .where(
+                VpnKey.status == VPN_KEY_RENEWING,
+                VpnKey.updated_at <= stale_before,
+            )
+            .order_by(VpnKey.updated_at.asc())
+            .limit(limit=limit)
+        )
+
+        return list(result.scalars().all())
+
     async def claim_stale_renewing(
             self,
             *,
