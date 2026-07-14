@@ -81,7 +81,7 @@ async def get_database_xui_emails() -> set[str]:
         return await vpn_key_repository.get_all_xui_emails()
 
 
-async def reconcile(
+async def cleanup_orphans(
         *,
         apply_changes: bool,
         grace_period_seconds: int,
@@ -185,7 +185,7 @@ async def main() -> None:
     arguments: argparse.Namespace = parse_arguments()
 
     try:
-        await reconcile(
+        await cleanup_orphans(
             apply_changes=arguments.apply,
             grace_period_seconds=arguments.grace_seconds,
         )
