@@ -164,11 +164,70 @@ class VpnKeyService:
 
         recovering_stale_creation = False
 
-        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_ACTIVE:
-            return self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
+        if existing_vpn_key is not None and existing_vpn_key.status in {VPN_KEY_ACTIVE, VPN_KEY_DISABLED}:
+            if not isinstance(existing_vpn_key.xui_email, str) or not existing_vpn_key.xui_email.strip():
+                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_email")
+            if not isinstance(existing_vpn_key.subscription_url, str) or not existing_vpn_key.subscription_url.strip():
+                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have subscription_url")
+            if not isinstance(existing_vpn_key.xui_uuid, str) or not existing_vpn_key.xui_uuid.strip():
+                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_uuid")
+            if not isinstance(existing_vpn_key.xui_sub_id, str) or not existing_vpn_key.xui_sub_id.strip():
+                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_sub_id")
 
-        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_DISABLED:
-            raise VpnKeyDisabledError(f"A disabled VPN key {existing_vpn_key.id} already exists for this user")
+            target_expires_at: datetime = self._calculate_renewal_expires_at(
+                current_expires_at=existing_vpn_key.expires_at,
+                duration_days=selected_tariff.duration_days,
+            )
+
+            renewal: VpnKey | None = await self.vpn_keys_repository.begin_renewal(
+                vpn_key_id=existing_vpn_key.id,
+                pending_tariff_id=selected_tariff.id,
+                pending_expires_at=target_expires_at,
+            )
+
+            if renewal is None:
+                await self.session.rollback()
+                raise VpnKeyRenewalInProgressError(f"VPN key {existing_vpn_key.id} is already being renewed")
+
+            await self.session.commit()
+
+            return await self._execute_pending_renewal(
+                vpn_key=renewal,
+                tariff=selected_tariff,
+            )
+
+        if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_RENEWING:
+            stale_before = datetime.now(timezone.utc) - VPN_KEY_RENEWING_TIMEOUT
+
+            renewal = await self.vpn_keys_repository.claim_stale_renewing(
+                vpn_key_id=existing_vpn_key.id,
+                stale_before=stale_before,
+            )
+
+            if renewal is None:
+                await self.session.rollback()
+                raise VpnKeyRenewalInProgressError(f"VPN key {existing_vpn_key.id} is currently being renewed")
+
+            await self.session.commit()
+
+            if renewal.pending_tariff_id is None:
+                raise VpnKeyInvalidStateError(f"Renewing VPN key {renewal.id} does not have pending_tariff_id")
+
+            pending_tariff: Tariff | None = await self.tariffs_repository.get_tariff_by_id(tariff_id=renewal.pending_tariff_id)
+
+            if pending_tariff is None:
+                raise VpnKeyInvalidStateError(f"Pending tariff {renewal.pending_tariff_id} was not found")
+
+            logger.warning(
+                "Resuming stale VPN key renewal (vpn_key_id=%s, target_expires_at=%s)",
+                renewal.id,
+                renewal.pending_expires_at,
+            )
+
+            return await self._execute_pending_renewal(
+                vpn_key=renewal,
+                tariff=pending_tariff,
+            )
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_CREATING:
             stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
