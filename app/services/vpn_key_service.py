@@ -18,8 +18,8 @@ from app.database.models import (
     VPN_KEY_DISABLED,
     VPN_KEY_RENEWING,
 )
-from app.repositories.tariffs import TariffRepository
-from app.repositories.vpn_keys import VpnKeyRepository
+from app.repositories.tariff_repository import TariffRepository
+from app.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.user_service import UserService
 
 from app.services.exceptions import (

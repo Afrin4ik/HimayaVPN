@@ -8,7 +8,7 @@ from typing import Any
 from app.config import Settings, get_settings
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
-from app.repositories.vpn_keys import VpnKeyRepository
+from app.repositories.vpn_key_repository import VpnKeyRepository
 
 
 logger = logging.getLogger(__name__)
