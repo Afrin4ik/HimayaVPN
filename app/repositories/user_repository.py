@@ -1,6 +1,6 @@
 from typing import Tuple
 
-from sqlalchemy import Result, func, select
+from sqlalchemy import Result, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,3 +44,26 @@ class UserRepository:
 
         result: Result[Tuple[User]] = await self.session.execute(statement=stmt)
         return result.scalar_one()
+
+    async def consume_trial_if_available(
+            self,
+            *,
+            user_id: int,
+    ) -> bool:
+        stmt = (
+            update(table=User)
+            .where(
+                User.id == user_id,
+                User.trial_available.is_(True),
+            )
+            .values(
+                trial_available=False,
+                updated_at=func.now(),
+            )
+            .returning(User.id)
+        )
+
+        result: Result[Tuple[int]] = await self.session.execute(statement=stmt)
+        claimed_user_id: int | None = result.scalar_one_or_none()
+
+        return claimed_user_id is not None
