@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 VPN_KEY_CREATING_TIMEOUT = timedelta(minutes=2)
 VPN_KEY_RENEWING_TIMEOUT = timedelta(minutes=2)
 
+TRIAL_TARIFF_CODE = "trial_3_days"
+
 
 class VpnKeyService:
     def __init__(self, session: AsyncSession, xui: AsyncXUI, xui_config: XUIConfig) -> None:
@@ -148,12 +150,44 @@ class VpnKeyService:
                 email,
             )
 
+    async def create_trial_vpn_key_for_new_user(
+            self,
+            *,
+            telegram_user: TelegramUser,
+    ) -> VpnKey | None:
+        return await self._get_create_or_renew_vpn_key(
+            telegram_user=telegram_user,
+            tariff_code=TRIAL_TARIFF_CODE,
+            allow_renewal=False,
+            require_trial=True,
+        )
+
     async def get_or_create_vpn_key_for_user(
             self,
             *,
             telegram_user: TelegramUser,
             tariff_code: str,
     ) -> VpnKey:
+        vpn_key: VpnKey | None = await self._get_create_or_renew_vpn_key(
+            telegram_user=telegram_user,
+            tariff_code=tariff_code,
+            allow_renewal=True,
+            require_trial=False,
+        )
+
+        if vpn_key is None:
+            raise VpnKeyInvalidStateError("Paid VPN key operation unexpectedly returned None")
+
+        return vpn_key
+
+    async def _get_create_or_renew_vpn_key(
+            self,
+            *,
+            telegram_user: TelegramUser,
+            tariff_code: str,
+            allow_renewal: bool,
+            require_trial: bool,
+    ) -> VpnKey | None:
         user: User = await self.user_service.sync_telegram_user(telegram_user=telegram_user)
 
         selected_tariff: Tariff | None = await self.tariffs_repository.get_active_tariff_by_code(code=tariff_code)
@@ -162,9 +196,28 @@ class VpnKeyService:
 
         existing_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
 
+        if require_trial:
+            if existing_vpn_key is None:
+                trial_consumed: bool = await self.user_service.consume_trial_if_available(user_id=user.id)
+                if not trial_consumed:
+                    await self.session.rollback()
+                    return None
+
+            elif existing_vpn_key.tariff_id != selected_tariff.id:
+                await self.session.commit()
+                return None
+
         recovering_stale_creation = False
 
         if existing_vpn_key is not None and existing_vpn_key.status in {VPN_KEY_ACTIVE, VPN_KEY_DISABLED}:
+            if not allow_renewal:
+                if existing_vpn_key.status == VPN_KEY_ACTIVE:
+                    usable_vpn_key: VpnKey = self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
+                    await self.session.commit()
+                    return usable_vpn_key
+                if existing_vpn_key.status == VPN_KEY_DISABLED:
+                    raise VpnKeyDisabledError(f"Trial VPN key {existing_vpn_key.id} has expired")
+
             if not isinstance(existing_vpn_key.xui_email, str) or not existing_vpn_key.xui_email.strip():
                 raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_email")
             if not isinstance(existing_vpn_key.subscription_url, str) or not existing_vpn_key.subscription_url.strip():
@@ -197,11 +250,14 @@ class VpnKeyService:
             )
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_RENEWING:
-            stale_before = datetime.now(timezone.utc) - VPN_KEY_RENEWING_TIMEOUT
+            if not allow_renewal:
+                raise VpnKeyRenewalInProgressError(f"VPN key {existing_vpn_key.id} is currently being renewed")
+
+            renewal_stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_RENEWING_TIMEOUT
 
             renewed_vpn_key: VpnKey | None = await self.resume_stale_renewal(
                 vpn_key_id=existing_vpn_key.id,
-                stale_before=stale_before,
+                stale_before=renewal_stale_before,
             )
 
             if renewed_vpn_key is None:
@@ -210,12 +266,12 @@ class VpnKeyService:
             return renewed_vpn_key
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_CREATING:
-            stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
+            creation_stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
 
             placeholder: VpnKey | None = await self.vpn_keys_repository.claim_stale_creating(
                 vpn_key_id=existing_vpn_key.id,
                 tariff_id=selected_tariff.id,
-                stale_before=stale_before,
+                stale_before=creation_stale_before,
             )
 
             if placeholder is None:
@@ -272,7 +328,7 @@ class VpnKeyService:
             if recovering_stale_creation:
                 await self._delete_untracked_xui_clients_for_user(telegram_id=user.telegram_id)
 
-            created_xui_client: CreatedXUIClient = await self.xui.add_client(
+            created_xui_client = await self.xui.add_client(
                 email=f"tg_{user.telegram_id}",
                 inbound_ids=self.xui_config.default_inbound_ids,
                 limit_ip=selected_tariff.limit_ip,
@@ -312,7 +368,7 @@ class VpnKeyService:
 
             cleanup_error: Exception | None = None
 
-            if (created_xui_client is not None and not database_commit_started):
+            if created_xui_client is not None and not database_commit_started:
                 try:
                     await self.xui.delete_client(
                         email=created_xui_client.email,
