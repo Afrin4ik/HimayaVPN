@@ -4,14 +4,16 @@ import asyncio
 
 from aiogram import Bot, Dispatcher
 
+from contextlib import suppress
+
 from app.config import Settings, get_settings
 from app.handlers import router
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.middlewares.database import DatabaseSessionMiddleware
-from app.workers.renewal_reconciler import run_renewal_reconciler
 
-from contextlib import suppress
+from app.workers.renewal_reconciler import run_renewal_reconciler
+from app.workers.expiration_reconciler import run_expiration_reconciler
 
 
 async def main() -> None:
@@ -38,7 +40,7 @@ async def main() -> None:
     dp.update.middleware(middleware=DatabaseSessionMiddleware(session_factory=async_session_factory))
     dp.include_router(router=router)
 
-    reconciler_task: asyncio.Task[None] = asyncio.create_task(
+    renewal_reconciler_task: asyncio.Task[None] = asyncio.create_task(
         coro=run_renewal_reconciler(
             session_factory=async_session_factory,
             xui=xui,
@@ -47,13 +49,28 @@ async def main() -> None:
         name="vpn-renewal-reconciler",
     )
 
+    expiration_reconciler_task: asyncio.Task[None] = asyncio.create_task(
+        coro=run_expiration_reconciler(
+            session_factory=async_session_factory,
+        ),
+        name="vpn-expiration-reconciler",
+    )
+
+    background_tasks: list[asyncio.Task[None]] = [
+        renewal_reconciler_task,
+        expiration_reconciler_task,
+    ]
+
     try:
         await dp.start_polling(bot)
-    finally:
-        reconciler_task.cancel()
 
-        with suppress(asyncio.CancelledError):
-            await reconciler_task
+    finally:
+        for task in background_tasks:
+            task.cancel()
+
+        for task in background_tasks:
+            with suppress(asyncio.CancelledError):
+                await task
 
         await xui.close()
         await close_database()
