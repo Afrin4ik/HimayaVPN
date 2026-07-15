@@ -22,3 +22,10 @@ class UserService:
         )
         await self.session.commit()
         return user
+
+    async def consume_trial_if_available(
+            self,
+            *,
+            user_id: int,
+    ) -> bool:
+        return await self.user_repository.consume_trial_if_available(user_id=user_id)
