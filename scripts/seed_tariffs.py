@@ -7,6 +7,15 @@ from app.database.models import Tariff
 
 TARIFFS = [
     {
+        "code": "trial_3_days",
+        "title": "Пробный период — 3 дня",
+        "price_rub": 0,
+        "duration_days": 3,
+        "limit_ip": 1,
+        "total_gb": 30,
+        "is_active": True,
+    },
+    {
         "code": "tariff_1",
         "title": "1 месяц",
         "price_rub": 100,
