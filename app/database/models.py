@@ -58,6 +58,8 @@ class User(Base, TimestampMixin):
     language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_bot: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
 
+    trial_available: Mapped[bool] = mapped_column(Boolean, server_default=text("true"), nullable=False)
+
     vpn_key: Mapped["VpnKey | None"] = relationship(back_populates="user", uselist=False)
     orders: Mapped[list["Order"]] = relationship(back_populates="user")
 
