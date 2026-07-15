@@ -251,6 +251,29 @@ class VpnKeyRepository:
             )
         )
 
+    async def disable_expired_active_keys(
+            self,
+            *,
+            expired_before: datetime,
+    ) -> list[int]:
+        stmt = (
+            update(table=VpnKey)
+            .where(
+                VpnKey.status == VPN_KEY_ACTIVE,
+                VpnKey.expires_at.is_not(None),
+                VpnKey.expires_at <= expired_before,
+            )
+            .values(
+                status=VPN_KEY_DISABLED,
+                updated_at=func.now(),
+            )
+            .returning(VpnKey.id)
+        )
+
+        result: Result[Tuple[int]] = await self.session.execute(statement=stmt)
+
+        return list(result.scalars().all())
+
     async def mark_failed(
             self,
             *,
