@@ -51,25 +51,25 @@ class VpnKeyService:
         self.user_service = UserService(session=session)
 
     @staticmethod
-    def _require_usable_active_vpn_key(
-        vpn_key: VpnKey,
-    ) -> VpnKey:
+    def _require_vpn_key_credentials(vpn_key: VpnKey) -> VpnKey:
+        required_fields: dict[str, str | None] = {
+            "subscription_url": vpn_key.subscription_url,
+            "xui_email": vpn_key.xui_email,
+            "xui_uuid": vpn_key.xui_uuid,
+            "xui_sub_id": vpn_key.xui_sub_id,
+        }
+
+        for field_name, field_value in required_fields.items():
+            if not isinstance(field_value, str) or not field_value.strip():
+                raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} does not have {field_name}")
+
+        return vpn_key
+
+    def _require_usable_active_vpn_key(self, vpn_key: VpnKey,) -> VpnKey:
         if vpn_key.status != VPN_KEY_ACTIVE:
             raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} is not active (status={vpn_key.status})")
 
-        if not isinstance(vpn_key.subscription_url, str) or not vpn_key.subscription_url.strip():
-            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have subscription_url")
-
-        if not isinstance(vpn_key.xui_email, str) or not vpn_key.xui_email.strip():
-            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_email")
-
-        if not isinstance(vpn_key.xui_uuid, str) or not vpn_key.xui_uuid.strip():
-            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_uuid")
-
-        if not isinstance(vpn_key.xui_sub_id, str) or not vpn_key.xui_sub_id.strip():
-            raise VpnKeyInvalidStateError(f"Active VPN key {vpn_key.id} dose not have xui_sub_id")
-
-        return vpn_key
+        return self._require_vpn_key_credentials(vpn_key=vpn_key)
 
     @staticmethod
     def _calculate_renewal_expires_at(
@@ -218,14 +218,7 @@ class VpnKeyService:
                 if existing_vpn_key.status == VPN_KEY_DISABLED:
                     raise VpnKeyDisabledError(f"Trial VPN key {existing_vpn_key.id} has expired")
 
-            if not isinstance(existing_vpn_key.xui_email, str) or not existing_vpn_key.xui_email.strip():
-                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_email")
-            if not isinstance(existing_vpn_key.subscription_url, str) or not existing_vpn_key.subscription_url.strip():
-                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have subscription_url")
-            if not isinstance(existing_vpn_key.xui_uuid, str) or not existing_vpn_key.xui_uuid.strip():
-                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_uuid")
-            if not isinstance(existing_vpn_key.xui_sub_id, str) or not existing_vpn_key.xui_sub_id.strip():
-                raise VpnKeyInvalidStateError(f"VPN key {existing_vpn_key.id} does not have xui_sub_id")
+            self._require_vpn_key_credentials(vpn_key=existing_vpn_key)
 
             target_expires_at: datetime = self._calculate_renewal_expires_at(
                 current_expires_at=existing_vpn_key.expires_at,
