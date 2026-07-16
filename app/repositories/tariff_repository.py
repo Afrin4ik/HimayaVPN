@@ -17,6 +17,7 @@ class TariffRepository:
                 Tariff.is_active.is_(True),
             )
         )
+
         return result.scalar_one_or_none()
 
     async def get_tariff_by_id(

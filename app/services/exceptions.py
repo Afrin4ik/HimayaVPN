@@ -24,3 +24,15 @@ class VpnKeyRenewalInProgressError(VpnKeyServiceError):
 
 class VpnKeyRenewalFailedError(VpnKeyServiceError):
     """VPN key renewal could not be completed"""
+
+
+class TariffServiceError(Exception):
+    """Base exception for tariff service errors"""
+
+
+class TariffUnavailableError(TariffServiceError):
+    """Requested tariff does not exist or is disabled"""
+
+
+class TariffConfigurationError(TariffServiceError):
+    """Tariff contains invalid configuration"""
