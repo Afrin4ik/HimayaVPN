@@ -72,6 +72,18 @@ class VpnKeyService:
         return self._require_vpn_key_credentials(vpn_key=vpn_key)
 
     @staticmethod
+    def _normalize_expires_at(expires_at: datetime) -> datetime:
+        if expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
+
+        expiry_time_ms = int(expires_at.timestamp() * 1000)
+
+        return datetime.fromtimestamp(
+            timestamp=expiry_time_ms / 1000,
+            tz=timezone.utc,
+        )
+
+    @staticmethod
     def _calculate_renewal_expires_at(
             *,
             current_expires_at: datetime | None,
@@ -82,12 +94,14 @@ class VpnKeyService:
 
         now: datetime = datetime.now(timezone.utc)
 
-        if (current_expires_at is not None and current_expires_at > now):
+        if current_expires_at is not None and current_expires_at > now:
             base: datetime = current_expires_at
         else:
             base: datetime = now
 
-        return base + timedelta(days=duration_days)
+        target_expires_at: datetime = base + timedelta(days=duration_days)
+
+        return VpnKeyService._normalize_expires_at(expires_at=target_expires_at)
 
     def _resolve_vpn_key_after_integrity_error(
             self,
@@ -321,19 +335,24 @@ class VpnKeyService:
             if recovering_stale_creation:
                 await self._delete_untracked_xui_clients_for_user(telegram_id=user.telegram_id)
 
+            expires_at: datetime = self._calculate_renewal_expires_at(
+                current_expires_at=None,
+                duration_days=selected_tariff.duration_days,
+            )
+
+            expiry_time_ms = int(expires_at.timestamp() * 1000)
+
             created_xui_client = await self.xui.add_client(
                 email=f"tg_{user.telegram_id}",
                 inbound_ids=self.xui_config.default_inbound_ids,
                 limit_ip=selected_tariff.limit_ip,
                 total_gb=selected_tariff.total_gb,
-                expiry_days=selected_tariff.duration_days,
+                expiry_time_ms=expiry_time_ms,
                 tg_id=user.telegram_id,
                 comment=f"HimayaVPN user, tg_id: {user.telegram_id}",
             )
 
             subscription_url: str = await self.xui.get_client_subscription_link(email=created_xui_client.email)
-
-            expires_at: datetime = datetime.now(timezone.utc) + timedelta(days=selected_tariff.duration_days)
 
             vpn_key: VpnKey = await self.vpn_keys_repository.activate(
                 vpn_key_id=placeholder.id,

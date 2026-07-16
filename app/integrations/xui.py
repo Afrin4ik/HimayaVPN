@@ -105,14 +105,6 @@ class AsyncXUI:
         return int(total_gb * 1024 ** 3)
 
     @staticmethod
-    def _expiry_days_to_ms(expiry_days: int) -> int:
-        if expiry_days < 0:
-            raise XUIException("expiry_days cannot be negative")
-        if expiry_days == 0:
-            return 0
-        return int((time.time() + expiry_days * 24 * 60 * 60) * 1000)
-
-    @staticmethod
     def _generate_uuid() -> str:
         return str(uuid.uuid4())
 
@@ -290,7 +282,7 @@ class AsyncXUI:
             flow: str = "", # "xtls-rprx-vision" -- для inbound с конфигурацией VLESS + TCP + REALITY/TLS
             limit_ip: int = 0,
             total_gb: int = 0,
-            expiry_days: int = 0,
+            expiry_time_ms: int = 0,
             enable: bool = True,
             tg_id: int = 0,
             comment: str = "",
@@ -321,9 +313,9 @@ class AsyncXUI:
         if total_gb < 0:
             raise XUIException("total_gb cannot be negative")
 
-        if not isinstance(expiry_days, int):
-            raise XUIException("expiry_time must be an int")
-        if expiry_days < 0:
+        if not isinstance(expiry_time_ms, int):
+            raise XUIException("expiry_time_ms must be an int")
+        if expiry_time_ms < 0:
             raise XUIException("expiry_time_ms cannot be negative")
 
         if not isinstance(enable, bool):
@@ -357,7 +349,7 @@ class AsyncXUI:
             "flow": flow,
             "limitIp": limit_ip,
             "totalGB": self._gb_to_bytes(total_gb=total_gb),
-            "expiryTime": self._expiry_days_to_ms(expiry_days=expiry_days),
+            "expiryTime": expiry_time_ms,
             "enable": enable,
             "tgId": tg_id,
             "subId": client_sub_id,
@@ -398,7 +390,7 @@ class AsyncXUI:
             flow: str = "",
             limit_ip: int | None = None,
             total_gb: int | None = None,
-            expiry_days: int = 0,
+            expiry_time_ms: int = 0,
             enable: bool = True,
             tg_id: int = 0,
             comment: str = "",
@@ -425,7 +417,7 @@ class AsyncXUI:
             flow=flow,
             limit_ip=target_limit_ip,
             total_gb=target_total_gb,
-            expiry_days=expiry_days,
+            expiry_time_ms=expiry_time_ms,
             enable=enable,
             tg_id=tg_id,
             comment=comment,
