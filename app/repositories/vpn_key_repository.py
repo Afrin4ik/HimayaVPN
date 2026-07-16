@@ -282,7 +282,10 @@ class VpnKeyRepository:
     ) -> None:
         await self.session.execute(
             statement=update(table=VpnKey)
-            .where(VpnKey.id == vpn_key_id)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_CREATING,
+            )
             .values(
                 status=VPN_KEY_FAILED,
                 error_message=error_message[:2000],

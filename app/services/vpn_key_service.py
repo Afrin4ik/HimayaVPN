@@ -359,16 +359,71 @@ class VpnKeyService:
 
         except Exception as original_exc:
             logger.exception(
-                "VPN key creation failed: user_id=%s, telegram_id=%s",
+                "VPN key creation failed (user_id=%s, telegram_id=%s)",
                 user.id,
                 user.telegram_id,
             )
 
             await self.session.rollback()
 
+            if database_commit_started and created_xui_client is not None:
+                try:
+                    refreshed_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
+
+                except Exception as verification_exc:
+                    await self.session.rollback()
+
+                    logger.exception(
+                        "Cannot verify VPN key state after commit error (user_id=%s, created_email=%s)",
+                        user.id,
+                        created_xui_client.email,
+                    )
+
+                    raise original_exc from verification_exc
+
+                if refreshed_vpn_key is not None and refreshed_vpn_key.status == VPN_KEY_ACTIVE:
+                    if refreshed_vpn_key.xui_email != created_xui_client.email:
+                        await self.session.rollback()
+
+                        logger.error(
+                            "Database contains another active VPN key after ambiguous commit (vpn_key_id=%s, database_email=%s, created_email=%s)",
+                            refreshed_vpn_key.id,
+                            refreshed_vpn_key.xui_email,
+                            created_xui_client.email,
+                        )
+
+                        raise VpnKeyInvalidStateError(
+                            f"Database contains another active VPN key after ambiguous commit (vpn_key_id={refreshed_vpn_key.id})"
+                        ) from original_exc
+
+                    try:
+                        usable_vpn_key = self._require_usable_active_vpn_key(vpn_key=refreshed_vpn_key)
+
+                    except Exception:
+                        await self.session.rollback()
+
+                        logger.exception(
+                            "VPN key was committed as active, but its data is invalid (vpn_key_id=%s)",
+                            refreshed_vpn_key.id,
+                        )
+
+                        raise
+
+                    await self.session.commit()
+
+                    logger.warning(
+                        "VPN key creation commit returned an error, but database already contains the result (vpn_key_id=%s, xui_email=%s)",
+                        usable_vpn_key.id,
+                        usable_vpn_key.xui_email,
+                    )
+
+                    return usable_vpn_key
+
+                await self.session.rollback()
+
             cleanup_error: Exception | None = None
 
-            if created_xui_client is not None and not database_commit_started:
+            if created_xui_client is not None:
                 try:
                     await self.xui.delete_client(
                         email=created_xui_client.email,
@@ -376,7 +431,7 @@ class VpnKeyService:
                     )
 
                     logger.info(
-                        "Compensation completed: deleted XUI client (email: %s)",
+                        "Compensation completed: deleted XUI client (email=%s)",
                         created_xui_client.email,
                     )
 
@@ -384,7 +439,7 @@ class VpnKeyService:
                     cleanup_error = exc
 
                     logger.exception(
-                        "Compensation failed: cannot delete XUI client (email: %s)",
+                        "Compensation failed: cannot delete XUI client (email=%s)",
                         created_xui_client.email,
                     )
 
