@@ -165,6 +165,7 @@ class VpnKey(Base, TimestampMixin):
     xui_email: Mapped[str | None] = mapped_column(String(320), unique=True, nullable=True)
     xui_uuid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     xui_sub_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    subscription_url: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
     inbound_ids: Mapped[list[int]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"), nullable=False)
 
     status: Mapped[str] = mapped_column(String(16), server_default=VPN_KEY_CREATING, nullable=False)
@@ -174,8 +175,6 @@ class VpnKey(Base, TimestampMixin):
 
     pending_tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=True)
     pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    subscription_url: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
