@@ -26,8 +26,8 @@ class TariffService:
         if not tariff.title.strip():
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has an empty title")
 
-        if tariff.price_rub <= 0:
-            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive price")
+        if tariff.price_rub < 0:
+            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative price")
 
         if tariff.duration_days <= 0:
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive duration")

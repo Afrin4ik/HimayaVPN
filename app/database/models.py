@@ -76,8 +76,8 @@ class Tariff(Base, TimestampMixin):
             name="ck_tariffs_title_not_blank",
         ),
         CheckConstraint(
-            sqltext="price_rub > 0",
-            name="ck_tariffs_price_rub_positive",
+            sqltext="price_rub >= 0",
+            name="ck_tariffs_price_rub_non_negative",
         ),
         CheckConstraint(
             sqltext="duration_days > 0",
