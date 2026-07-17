@@ -19,6 +19,7 @@ from app.services.exceptions import (
     VpnKeyCreationFailedError,
     VpnKeyRenewalInProgressError,
     VpnKeyDisabledError,
+    TariffServiceError,
 )
 
 
@@ -92,6 +93,19 @@ async def cmd_start(
         trial_message = (
             f"Ваш VPN-ключ отключён. Срок действия вашего бесплатного пробного периода истёк ⏱️\n\n"
             f"Чтобы продолжить использовать VPN-ключ, выберите один из доступных тарифов"
+        )
+
+    except TariffServiceError:
+        await session.rollback()
+
+        trial_message = (
+            f"😢 Бесплатный пробный период временно недоступен\n\n"
+            f"Попробуйте отправить \"/start\" позже"
+        )
+
+        logger.exception(
+            "Trial tariff is unavailable (telegram_user_id=%s)",
+            user.id,
         )
 
     except Exception:

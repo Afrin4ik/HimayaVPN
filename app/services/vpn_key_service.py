@@ -379,7 +379,7 @@ class VpnKeyService:
                 try:
                     refreshed_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
 
-                except Exception as verification_exc:
+                except Exception:
                     await self.session.rollback()
 
                     logger.exception(
@@ -388,7 +388,9 @@ class VpnKeyService:
                         created_xui_client.email,
                     )
 
-                    raise original_exc from verification_exc
+                    raise VpnKeyCreationFailedError(
+                        f"Cannot verify VPN key creation result for user {user.id}"
+                    ) from original_exc
 
                 if refreshed_vpn_key is not None and refreshed_vpn_key.status == VPN_KEY_ACTIVE:
                     if refreshed_vpn_key.xui_email != created_xui_client.email:
@@ -472,7 +474,9 @@ class VpnKeyService:
                     placeholder.id,
                 )
 
-            raise
+            raise VpnKeyCreationFailedError(
+                f"Cannot create VPN key for user {user.id}"
+            ) from original_exc
 
     async def resume_stale_renewal(
             self,
