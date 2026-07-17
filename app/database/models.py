@@ -149,7 +149,7 @@ class VpnKey(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), nullable=False)
 
     xui_email: Mapped[str | None] = mapped_column(String(320), unique=True, nullable=True)
     xui_uuid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
