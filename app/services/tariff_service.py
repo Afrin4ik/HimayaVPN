@@ -26,17 +26,17 @@ class TariffService:
         if not tariff.title.strip():
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has an empty title")
 
-        if tariff.price_rub < 0:
-            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative price")
+        if tariff.price_rub <= 0:
+            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive price")
 
         if tariff.duration_days <= 0:
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive duration")
 
-        if tariff.limit_ip < 0:
-            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative limit_ip")
+        if tariff.limit_ip <= 0:
+            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive limit_ip")
 
-        if tariff.total_gb < 0:
-            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative total_gb")
+        if tariff.total_gb <= 0:
+            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive total_gb")
 
         return tariff
 
