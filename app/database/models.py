@@ -100,8 +100,8 @@ class Tariff(Base, TimestampMixin):
 
     price_rub: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    limit_ip: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
-    total_gb: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    limit_ip: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_gb: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
 
     vpn_keys: Mapped[list["VpnKey"]] = relationship(back_populates="tariff", foreign_keys="VpnKey.tariff_id")
