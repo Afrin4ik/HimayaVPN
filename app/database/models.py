@@ -12,6 +12,7 @@ from sqlalchemy import (
     CheckConstraint,
     func,
     text,
+    Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -144,6 +145,16 @@ class VpnKey(Base, TimestampMixin):
                 ")"
             ),
             name="ck_vpn_keys_renewing_has_pending_data",
+        ),
+        Index(
+            "ix_vpn_keys_status_updated_at",
+            "status",
+            "updated_at",
+        ),
+        Index(
+            "ix_vpn_keys_status_expires_at",
+            "status",
+            "expires_at",
         ),
     )
 
