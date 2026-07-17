@@ -313,7 +313,7 @@ class AsyncXUI:
         if total_gb < 0:
             raise XUIException("total_gb cannot be negative")
 
-        if not isinstance(expiry_time_ms, int):
+        if isinstance(expiry_time_ms, bool) or not isinstance(expiry_time_ms, int):
             raise XUIException("expiry_time_ms must be an int")
         if expiry_time_ms < 0:
             raise XUIException("expiry_time_ms cannot be negative")
@@ -520,7 +520,7 @@ class AsyncXUI:
                 raise XUIException("total_gb cannot be negative")
 
         if expiry_time_ms is not None:
-            if not isinstance(expiry_time_ms, int):
+            if isinstance(expiry_time_ms, bool) or not isinstance(expiry_time_ms, int):
                 raise XUIException("expiry_time must be an int")
             if expiry_time_ms < 0:
                 raise XUIException("expiry_time_ms cannot be negative")
@@ -669,8 +669,8 @@ class AsyncXUI:
             total_gb: int,
             reset_traffic: bool = True,
     ) -> UpdatedXUIClient:
-        if not isinstance(target_expiry_time_ms, int):
-            raise XUIException("target_expiry_time_ms must bi an int")
+        if isinstance(target_expiry_time_ms, bool) or not isinstance(target_expiry_time_ms, int):
+            raise XUIException("target_expiry_time_ms must be an int")
         if target_expiry_time_ms <= 0:
             raise XUIException("target_expiry_time_ms must be positive")
 
