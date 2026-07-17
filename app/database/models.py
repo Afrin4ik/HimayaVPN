@@ -190,6 +190,14 @@ class Order(Base, TimestampMixin):
             sqltext="status in ('created', 'paid', 'cancelled', 'failed')",
             name="ck_orders_status",
         ),
+        CheckConstraint(
+            sqltext="amount_rub >= 0",
+            name="ck_orders_amount_rub_non_negative",
+        ),
+        CheckConstraint(
+            sqltext="jsonb_typeof(payload) = 'object'",
+            name="ck_orders_payload_is_object",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
