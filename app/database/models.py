@@ -198,6 +198,11 @@ class Order(Base, TimestampMixin):
             sqltext="jsonb_typeof(payload) = 'object'",
             name="ck_orders_payload_is_object",
         ),
+        Index(
+            "ix_orders_user_id_created_at",
+            "user_id",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
