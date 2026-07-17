@@ -55,7 +55,7 @@ async def callback_connect_vpn(
         await callback.message.edit_text(
             text=(
                 "⛓️‍💥 Не удалось загрузить тарифы\n\n"
-                "Попробуйте ещё раз позже"
+                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -94,10 +94,7 @@ async def callback_tariff_selected(
 ) -> None:
     tariff_code: str = callback_data.tariff_code
 
-    waiting_vpn_key_creating_message: LiteralString = (
-        f"Немного подождите, VPN-ключ создаётся..."
-    )
-    await callback.answer(text=waiting_vpn_key_creating_message)
+    await callback.answer()
 
     try:
         vpn_key_service = VpnKeyService(
