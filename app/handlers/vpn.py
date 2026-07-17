@@ -2,18 +2,19 @@ import logging
 
 from aiogram import Router, F
 
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 from typing import LiteralString
-from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 
 from app.keyboards.common import get_back_to_main_menu_inline_keyboard
-from app.keyboards.tariffs import get_tariffs_inline_keyboard
+from app.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import VpnKey
-from app.services.vpn_key_service import VpnKeyService
 from app.integrations.xui import AsyncXUI, XUIConfig
+
+from app.database.models import VpnKey, Tariff
+from app.services.vpn_key_service import VpnKeyService
+from app.services.tariff_service import TariffService
 
 from app.services.exceptions import (
     VpnKeyCreationInProgressError,
@@ -21,6 +22,7 @@ from app.services.exceptions import (
     VpnKeyDisabledError,
     VpnKeyRenewalInProgressError,
     VpnKeyRenewalFailedError,
+    TariffServiceError,
 )
 
 
@@ -31,27 +33,67 @@ router = Router()
 
 
 @router.callback_query(F.data == "connect_vpn")
-async def callback_connect_vpn(callback: CallbackQuery) -> None:
-    connect_vpn_message: LiteralString = (
-        f"📆 Выберите тариф\n"
+async def callback_connect_vpn(
+    callback: CallbackQuery,
+    session: AsyncSession,
+) -> None:
+    tariff_service = TariffService(session=session)
+
+    try:
+        tariffs: list[Tariff] = await tariff_service.get_public_active_tariffs()
+
+    except TariffServiceError:
+        await session.rollback()
+
+        logger.exception(
+            "Cannot load public active tariffs (telegram_user_id=%s)",
+            callback.from_user.id,
+        )
+
+        await callback.answer()
+
+        await callback.message.edit_text(
+            text=(
+                "⛓️‍💥 Не удалось загрузить тарифы\n\n"
+                "Попробуйте ещё раз позже"
+            ),
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+
+        return
+
+    if not tariffs:
+        await callback.answer()
+
+        await callback.message.edit_text(
+            text=(
+                "🚨 На данный момент нет доступных тарифов\n\n"
+                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
+            ),
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+
+        return
+
+    tariffs_keyboard: InlineKeyboardMarkup = get_tariffs_inline_keyboard(tariffs=tariffs)
+
+    await callback.answer()
+
+    await callback.message.edit_text(
+        text="📆 Выберите тариф",
+        reply_markup=tariffs_keyboard,
     )
 
-    tariffs_kd: InlineKeyboardMarkup = get_tariffs_inline_keyboard()
-    back_to_main_kd: InlineKeyboardMarkup = get_back_to_main_menu_inline_keyboard()
-
-    inline_kd = InlineKeyboardMarkup(
-        inline_keyboard=tariffs_kd.inline_keyboard + back_to_main_kd.inline_keyboard
-    )
-
-    await callback.message.edit_text(text=connect_vpn_message, reply_markup=inline_kd)
-
-@router.callback_query(F.data.in_({"tariff_1", "tariff_3", "tariff_6", "tariff_12"}))
+@router.callback_query(TariffCallback.filter())
 async def callback_tariff_selected(
     callback: CallbackQuery,
+    callback_data: TariffCallback,
     session: AsyncSession,
     xui: AsyncXUI,
     xui_config: XUIConfig,
 ) -> None:
+    tariff_code: str = callback_data.tariff_code
+
     waiting_vpn_key_creating_message: LiteralString = (
         f"Немного подождите, VPN-ключ создаётся..."
     )
@@ -65,8 +107,28 @@ async def callback_tariff_selected(
         )
         vpn_key: VpnKey = await vpn_key_service.get_or_create_vpn_key_for_user(
             telegram_user=callback.from_user,
-            tariff_code=callback.data,
+            tariff_code=tariff_code,
         )
+
+    except TariffServiceError:
+        await session.rollback()
+
+        logger.warning(
+            "Selected tariff is unavailable (telegram_user_id=%s, tariff_code=%s)",
+            callback.from_user.id,
+            tariff_code,
+            exc_info=True,
+        )
+
+        await callback.message.edit_text(
+            text=(
+                "❌ Выбранный тариф на данный момент недоступен\n\n"
+                "Пожалуйста, выберите другой тариф"
+            ),
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+
+        return
 
     except VpnKeyCreationInProgressError:
         await session.rollback()
@@ -86,7 +148,7 @@ async def callback_tariff_selected(
         logger.warning(
             "Previous VPN key creation failed (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
-            callback.data,
+            tariff_code,
         )
 
         vpn_key_creation_failed_message: LiteralString = (
@@ -130,7 +192,7 @@ async def callback_tariff_selected(
         logger.warning(
             "VPN key renewal failed (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
-            callback.data,
+            tariff_code,
         )
 
         vpn_key_renewal_failed_message: LiteralString = (
@@ -147,7 +209,7 @@ async def callback_tariff_selected(
         logger.exception(
             "Failed to create VPN key: telegram_user_id=%s, tariff_code=%s",
             callback.from_user.id,
-            callback.data,
+            tariff_code,
         )
 
         await session.rollback()

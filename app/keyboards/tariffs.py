@@ -1,29 +1,34 @@
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.filters.callback_data import CallbackData
 
-def get_tariffs_inline_keyboard() -> InlineKeyboardMarkup:
+from app.database.models import Tariff
+from app.keyboards.common import get_back_to_main_menu_inline_keyboard
+
+
+class TariffCallback(CallbackData, prefix="tariff"):
+    tariff_code: str
+
+
+def get_tariffs_inline_keyboard(
+        *,
+        tariffs: list[Tariff],
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    builder.button(
-        text="1 месяц - 100₽",
-        callback_data="tariff_1"
-    )
+    for tariff in tariffs:
+        builder.button(
+            text=f"{tariff.title} - {tariff.price_rub}₽",
+            callback_data=TariffCallback(
+                tariff_code=tariff.code
+            ),
+        )
 
-    builder.button(
-        text="3 месяца - 250₽",
-        callback_data="tariff_3"
-    )
+    builder.adjust(1)
 
-    builder.button(
-        text="6 месяцев - 500₽",
-        callback_data="tariff_6"
-    )
+    back_keyboard: InlineKeyboardMarkup = get_back_to_main_menu_inline_keyboard()
+    back_builder: InlineKeyboardBuilder = InlineKeyboardBuilder.from_markup(markup=back_keyboard)
 
-    builder.button(
-        text="12 месяцев - 1000₽",
-        callback_data="tariff_12"
-    )
-
-    builder.adjust(1, 1, 1, 1)
+    builder.attach(builder=back_builder)
 
     return builder.as_markup()
