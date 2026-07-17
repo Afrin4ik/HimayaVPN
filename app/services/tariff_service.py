@@ -30,7 +30,7 @@ class TariffService:
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative price")
 
         if tariff.duration_days <= 0:
-            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative duration")
+            raise TariffConfigurationError(f"Tariff {tariff.code!r} has a non-positive duration")
 
         if tariff.limit_ip < 0:
             raise TariffConfigurationError(f"Tariff {tariff.code!r} has a negative limit_ip")
