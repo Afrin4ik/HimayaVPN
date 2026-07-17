@@ -40,7 +40,6 @@ class TariffService:
 
         return tariff
 
-
     async def get_active_tariff_by_code(
             self,
             *,
@@ -69,3 +68,16 @@ class TariffService:
             raise TariffUnavailableError(f"Tariff id={tariff_id} does not exist")
 
         return self._require_valid_tariff(tariff=tariff)
+
+    async def get_public_active_tariffs(self) -> list[Tariff]:
+        tariffs: list[Tariff] = await self.tariff_repository.get_active_tariffs()
+
+        public_tariffs: list[Tariff] = []
+
+        for tariff in tariffs:
+            if tariff.code == TRIAL_TARIFF_CODE:
+                continue
+
+            public_tariffs.append(self._require_valid_tariff(tariff=tariff))
+
+        return public_tariffs
