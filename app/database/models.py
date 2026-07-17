@@ -169,7 +169,7 @@ class VpnKey(Base, TimestampMixin):
 
     status: Mapped[str] = mapped_column(String(16), server_default=VPN_KEY_CREATING, nullable=False)
 
-    tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="SET NULL"))
+    tariff_id: Mapped[int] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     pending_tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=True)
@@ -180,7 +180,7 @@ class VpnKey(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")
-    tariff: Mapped["Tariff | None"] = relationship(back_populates="vpn_keys", foreign_keys=[tariff_id])
+    tariff: Mapped["Tariff"] = relationship(back_populates="vpn_keys", foreign_keys=[tariff_id])
 
 
 class Order(Base, TimestampMixin):
