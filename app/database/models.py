@@ -66,6 +66,32 @@ class User(Base, TimestampMixin):
 
 class Tariff(Base, TimestampMixin):
     __tablename__ = "tariffs"
+    __table_args__ = (
+        CheckConstraint(
+            sqltext="btrim(code) <> ''",
+            name="ck_tariffs_code_not_blank",
+        ),
+        CheckConstraint(
+            sqltext="btrim(title) <> ''",
+            name="ck_tariffs_title_not_blank",
+        ),
+        CheckConstraint(
+            sqltext="price_rub > 0",
+            name="ck_tariffs_price_rub_positive",
+        ),
+        CheckConstraint(
+            sqltext="duration_days > 0",
+            name="ck_tariffs_duration_days_positive",
+        ),
+        CheckConstraint(
+            sqltext="limit_ip > 0",
+            name="ck_tariffs_limit_ip_positive",
+        ),
+        CheckConstraint(
+            sqltext="total_gb > 0",
+            name="ck_tariffs_total_gb_positive",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
