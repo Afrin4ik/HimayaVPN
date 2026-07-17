@@ -18,9 +18,9 @@ from app.database.models import (
     VPN_KEY_DISABLED,
     VPN_KEY_RENEWING,
 )
-from app.repositories.tariff_repository import TariffRepository
 from app.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.user_service import UserService
+from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
 
 from app.services.exceptions import (
     VpnKeyCreationInProgressError,
@@ -29,6 +29,7 @@ from app.services.exceptions import (
     VpnKeyInvalidStateError,
     VpnKeyRenewalInProgressError,
     VpnKeyRenewalFailedError,
+    TariffServiceError,
 )
 
 
@@ -38,17 +39,15 @@ logger = logging.getLogger(__name__)
 VPN_KEY_CREATING_TIMEOUT = timedelta(minutes=2)
 VPN_KEY_RENEWING_TIMEOUT = timedelta(minutes=2)
 
-TRIAL_TARIFF_CODE = "trial_3_days"
-
 
 class VpnKeyService:
     def __init__(self, session: AsyncSession, xui: AsyncXUI, xui_config: XUIConfig) -> None:
         self.session: AsyncSession = session
         self.xui: AsyncXUI = xui
         self.xui_config: XUIConfig = xui_config
-        self.tariffs_repository = TariffRepository(session=session)
         self.vpn_keys_repository = VpnKeyRepository(session=session)
         self.user_service = UserService(session=session)
+        self.tariff_service = TariffService(session=session)
 
     @staticmethod
     def _require_vpn_key_credentials(vpn_key: VpnKey) -> VpnKey:
@@ -204,9 +203,7 @@ class VpnKeyService:
     ) -> VpnKey | None:
         user: User = await self.user_service.sync_telegram_user(telegram_user=telegram_user)
 
-        selected_tariff: Tariff | None = await self.tariffs_repository.get_active_tariff_by_code(code=tariff_code)
-        if selected_tariff is None:
-            raise ValueError("No tariff found or tariff disabled")
+        selected_tariff: Tariff = await self.tariff_service.get_active_tariff_by_code(code=tariff_code)
 
         existing_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
 
@@ -500,10 +497,11 @@ class VpnKeyService:
         if renewal.pending_expires_at is None:
             raise VpnKeyInvalidStateError(f"Renewing VPN key {renewal.id} does not have pending_expires_at")
 
-        pending_tariff: Tariff | None = await self.tariffs_repository.get_tariff_by_id(tariff_id=renewal.pending_tariff_id)
+        try:
+            pending_tariff: Tariff = await self.tariff_service.get_tariff_by_id(tariff_id=renewal.pending_tariff_id)
 
-        if pending_tariff is None:
-            error_message = f"Pending tariff {renewal.pending_tariff_id} was not found"
+        except TariffServiceError as exc:
+            error_message = f"Cannot load pending tariff {renewal.pending_tariff_id}: {exc}"
 
             await self.vpn_keys_repository.record_renewal_error(
                 vpn_key_id=renewal.id,
@@ -511,7 +509,7 @@ class VpnKeyService:
             )
             await self.session.commit()
 
-            raise VpnKeyInvalidStateError(error_message)
+            raise VpnKeyInvalidStateError(error_message) from exc
 
         logger.warning(
             "Resuming stale VPN key renewal (vpn_key_id=%s, tariff_id=%s, target_expires_at=%s)",
