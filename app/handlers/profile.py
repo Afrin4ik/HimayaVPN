@@ -115,6 +115,7 @@ async def callback_profile(
         vpn_key_status_text = "Попытка создать VPN-ключ не удалась"
         vpn_key_subscription_url_text = "-"
         expires_at_text = "-"
+        remaining_time_text = "-"
     elif vpn_key.status == VPN_KEY_DISABLED:
         vpn_key_status_text = "Отключён"
     else:
