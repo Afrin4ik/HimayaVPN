@@ -223,11 +223,9 @@ class VpnKeyService:
         if existing_vpn_key is not None and existing_vpn_key.status in {VPN_KEY_ACTIVE, VPN_KEY_DISABLED}:
             if not allow_renewal:
                 if existing_vpn_key.status == VPN_KEY_ACTIVE:
-                    usable_vpn_key: VpnKey = self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
-                    await self.session.commit()
-                    return usable_vpn_key
-                if existing_vpn_key.status == VPN_KEY_DISABLED:
-                    raise VpnKeyDisabledError(f"Trial VPN key {existing_vpn_key.id} has expired")
+                    self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
+                await self.session.commit()
+                return None
 
             self._require_vpn_key_credentials(vpn_key=existing_vpn_key)
 
