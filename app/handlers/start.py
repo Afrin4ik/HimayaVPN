@@ -141,6 +141,8 @@ async def cmd_start(
 
 @router.callback_query(F.data == "back_to_main_menu")
 async def callback_back_to_main_menu(callback: CallbackQuery) -> None:
+    await callback.answer()
+
     main_message: LiteralString = (
         f"Для продолжения работы выберите действие ниже"
     )

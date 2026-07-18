@@ -37,6 +37,8 @@ async def callback_connect_vpn(
     callback: CallbackQuery,
     session: AsyncSession,
 ) -> None:
+    await callback.answer()
+
     tariff_service = TariffService(session=session)
 
     try:
@@ -50,8 +52,6 @@ async def callback_connect_vpn(
             callback.from_user.id,
         )
 
-        await callback.answer()
-
         await callback.message.edit_text(
             text=(
                 "⛓️‍💥 Не удалось загрузить тарифы\n\n"
@@ -63,8 +63,6 @@ async def callback_connect_vpn(
         return
 
     if not tariffs:
-        await callback.answer()
-
         await callback.message.edit_text(
             text=(
                 "🚨 На данный момент нет доступных тарифов\n\n"
@@ -76,8 +74,6 @@ async def callback_connect_vpn(
         return
 
     tariffs_keyboard: InlineKeyboardMarkup = get_tariffs_inline_keyboard(tariffs=tariffs)
-
-    await callback.answer()
 
     await callback.message.edit_text(
         text="📆 Выберите тариф",
