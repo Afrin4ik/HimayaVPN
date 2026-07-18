@@ -3,6 +3,7 @@ import logging
 import asyncio
 
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 
 from contextlib import suppress
 
@@ -20,6 +21,15 @@ async def main() -> None:
     settings: Settings = get_settings()
 
     bot = Bot(token=settings.bot_token)
+
+    await bot.set_my_commands(
+        commands=[
+            BotCommand(
+                command="start",
+                description="Запустить бота",
+            ),
+        ]
+    )
 
     xui_config = XUIConfig(
         base_url=settings.xui_base_url,
