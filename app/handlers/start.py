@@ -122,12 +122,12 @@ async def cmd_start(
 
     if trial_vpn_key is not None:
         trial_message = (
-        f"🎁 VPN-ключ с бесплатным пробным периодом на 3 дня готов!\n\n"
-        f"Действует до:\n"
-        f"{trial_vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"
-        f"Ваш ключ:\n"
-        f"{trial_vpn_key.subscription_url}\n\n"
-        f"Скопируйте ссылку и добавьте её в VPN-клиент"
+            f"🎁 VPN-ключ с бесплатным пробным периодом готов!\n\n"
+            f"Действует до:\n"
+            f"{trial_vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"
+            f"Ваш ключ:\n"
+            f"{trial_vpn_key.subscription_url}\n\n"
+            f"Скопируйте ссылку и добавьте её в VPN-клиент"
         )
 
     if trial_message is not None:
