@@ -156,6 +156,7 @@ async def callback_tariff_selected(
             text=vpn_key_creation_in_progress_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     except VpnKeyCreationFailedError:
@@ -175,6 +176,7 @@ async def callback_tariff_selected(
             text=vpn_key_creation_failed_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     except VpnKeyDisabledError:
@@ -188,6 +190,7 @@ async def callback_tariff_selected(
             text=vpn_key_disabled_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     except VpnKeyRenewalInProgressError:
@@ -200,6 +203,7 @@ async def callback_tariff_selected(
             text=vpn_key_renewal_in_progress_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     except VpnKeyRenewalFailedError:
@@ -219,6 +223,7 @@ async def callback_tariff_selected(
             text=vpn_key_renewal_failed_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     except Exception:
@@ -238,6 +243,7 @@ async def callback_tariff_selected(
             text=failed_vpn_key_creating_message,
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
+
         return
 
     success_vpn_key_creating_message: str = (

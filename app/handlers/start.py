@@ -55,12 +55,14 @@ async def cmd_start(
 
     except VpnKeyCreationInProgressError:
         await session.rollback()
+
         trial_message = (
             f"⏳ Немного подождите, VPN-ключ с бесплатным пробным периодом уже создаётся..."
         )
 
     except VpnKeyCreationFailedError:
         await session.rollback()
+
         trial_message = (
             f"⛓️‍💥 Не удалось завершить создание VPN-ключа c бесплатным пробным периодом\n\n"
             f"Попробуйте ещё раз через пару минут"
@@ -68,12 +70,14 @@ async def cmd_start(
 
     except VpnKeyRenewalInProgressError:
         await session.rollback()
+
         trial_message = (
             f"⏳ Немного подождите, VPN-ключ уже продлевается..."
         )
 
     except VpnKeyDisabledError:
         await session.rollback()
+
         trial_message = (
             f"Ваш VPN-ключ отключён. Срок действия вашего бесплатного пробного периода истёк ⏱️\n\n"
             f"Чтобы продолжить использовать VPN-ключ, выберите один из доступных тарифов"
@@ -94,6 +98,7 @@ async def cmd_start(
 
     except Exception:
         await session.rollback()
+
         trial_message = (
             f"Не удалось создать VPN-ключ с бесплатным пробным периодом ☹️\n\n"
             f"Попробуйте отправить \"/start\" ещё раз позже"
