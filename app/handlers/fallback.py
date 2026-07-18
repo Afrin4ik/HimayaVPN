@@ -12,7 +12,8 @@ router = Router()
 @router.message()
 async def cmd_help(message: Message) -> None:
     wrong_message: LiteralString = (
-        f"⚠️ Введено некорректное сообщение\n\nЕсли у вас возникли какие-либо сложности или вопросы, напишите в тех. поддержку: @miolerr"
+        f"⚠️ Введено некорректное сообщение\n\n"
+        f"Если у вас возникли какие-либо сложности или вопросы, напишите в тех. поддержку: @miolerr"
     )
 
     await message.answer(text=wrong_message, reply_markup=get_back_to_main_menu_inline_keyboard())

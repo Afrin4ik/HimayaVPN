@@ -23,7 +23,6 @@ async def callback_profile(callback: CallbackQuery) -> None:
         f"ID: {user.id}\n"
         f"Имя пользователя: {usrname}\n"
         f"Полное имя: {user.full_name}\n\n"
-        f"Баланс: ...\n\n"
         f"Тариф: ...\n"
         f"Действует до: ...\n"
     )
