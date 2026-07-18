@@ -62,6 +62,24 @@ async def callback_connect_vpn(
 
         return
 
+    except Exception:
+        await session.rollback()
+
+        logger.exception(
+            "Unexpected error while loading tariffs (telegram_user_id=%s)",
+            callback.from_user.id,
+        )
+
+        await callback.message.edit_text(
+            text=(
+                "⛓️‍💥 Не удалось загрузить тарифы\n\n"
+                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
+            ),
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+
+        return
+
     if not tariffs:
         await callback.message.edit_text(
             text=(
@@ -79,6 +97,7 @@ async def callback_connect_vpn(
         text="📆 Выберите тариф",
         reply_markup=tariffs_keyboard,
     )
+
 
 @router.callback_query(TariffCallback.filter())
 async def callback_tariff_selected(
