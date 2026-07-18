@@ -20,6 +20,8 @@ class Settings:
     xui_default_limit_ip: int
     xui_default_total_gb: int
     database_url: str
+    tg_support_username: str
+    tg_support_url: str
 
 
 def _get_required_env(key: str) -> str:
@@ -60,4 +62,6 @@ def get_settings() -> Settings:
         xui_default_limit_ip=_parse_int(value=_get_required_env(key="XUI_DEFAULT_LIMIT_IP")),
         xui_default_total_gb=_parse_int(value=_get_required_env(key="XUI_DEFAULT_TOTAL_GB")),
         database_url=_get_required_env(key="DATABASE_URL"),
+        tg_support_username=_get_required_env(key="TG_SUPPORT_USERNAME"),
+        tg_support_url=_get_required_env(key="TG_SUPPORT_URL"),
     )

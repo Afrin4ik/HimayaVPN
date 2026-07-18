@@ -1,11 +1,10 @@
-import os
-from dotenv import load_dotenv
-
 import logging
 
 from aiogram import Router, F
 
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
+
+from app.config import get_settings
 
 from app.keyboards.common import get_back_to_main_menu_inline_keyboard
 from app.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
@@ -28,8 +27,7 @@ from app.services.exceptions import (
 )
 
 
-load_dotenv()
-SUPPORT_USERNAME: str | None = os.getenv(key="SUPPORT_TG_USERNAME")
+SUPPORT_USERNAME: str = get_settings().tg_support_username
 
 
 logger = logging.getLogger(__name__)

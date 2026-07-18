@@ -1,12 +1,10 @@
-import os
-from dotenv import load_dotenv
+from app.config import get_settings
 
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-load_dotenv()
-SUPPORT_URL: str | None = os.getenv(key="SUPPORT_TG_URL")
+SUPPORT_URL: str = get_settings().tg_support_url
 
 
 def get_main_menu_inline_keyboard() -> InlineKeyboardMarkup:
