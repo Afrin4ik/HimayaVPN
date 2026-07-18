@@ -14,7 +14,7 @@ router = Router()
 
 
 @router.message()
-async def cmd_help(message: Message) -> None:
+async def fallback_message(message: Message) -> None:
     wrong_message: str = (
         f"⚠️ Введено некорректное сообщение\n\n"
         f"Если у вас возникли какие-либо сложности или вопросы, напишите в тех. поддержку: {SUPPORT_USERNAME}"
