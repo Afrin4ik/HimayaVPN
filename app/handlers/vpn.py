@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+
 import logging
 
 from aiogram import Router, F
@@ -23,6 +26,10 @@ from app.services.exceptions import (
     VpnKeyRenewalFailedError,
     TariffServiceError,
 )
+
+
+load_dotenv()
+SUPPORT_USERNAME: str | None = os.getenv(key="SUPPORT_TG_USERNAME")
 
 
 logger = logging.getLogger(__name__)
@@ -53,8 +60,8 @@ async def callback_connect_vpn(
 
         await callback.message.edit_text(
             text=(
-                "⛓️‍💥 Не удалось загрузить тарифы\n\n"
-                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
+                f"⛓️‍💥 Не удалось загрузить тарифы\n\n"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -71,8 +78,8 @@ async def callback_connect_vpn(
 
         await callback.message.edit_text(
             text=(
-                "⛓️‍💥 Не удалось загрузить тарифы\n\n"
-                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
+                f"⛓️‍💥 Не удалось загрузить тарифы\n\n"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -82,8 +89,8 @@ async def callback_connect_vpn(
     if not tariffs:
         await callback.message.edit_text(
             text=(
-                "🚨 На данный момент нет доступных тарифов\n\n"
-                "Попробуйте ещё раз позже или обратитесь в тех. поддержку: @miolerr"
+                f"🚨 На данный момент нет доступных тарифов\n\n"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -133,8 +140,8 @@ async def callback_tariff_selected(
 
         await callback.message.edit_text(
             text=(
-                "❌ Выбранный тариф на данный момент недоступен\n\n"
-                "Пожалуйста, выберите другой тариф"
+                f"❌ Выбранный тариф на данный момент недоступен\n\n"
+                f"Пожалуйста, выберите другой тариф"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -227,7 +234,7 @@ async def callback_tariff_selected(
 
         failed_vpn_key_creating_message: str = (
             f"Не удалось создать VPN-ключ ☹️\n\n"
-            f"Обратитесь в тех. поддержку: @miolerr"
+            f"Обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
         )
         await callback.message.edit_text(
             text=failed_vpn_key_creating_message,
