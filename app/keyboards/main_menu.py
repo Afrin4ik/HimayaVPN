@@ -23,7 +23,7 @@ def get_main_menu_inline_keyboard() -> InlineKeyboardMarkup:
     )
 
     builder.button(
-        text="👨‍💻 Тех. поддержка",
+        text="🛠️ Тех. поддержка",
         url=SUPPORT_URL
     )
 

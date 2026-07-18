@@ -37,21 +37,6 @@ async def cmd_start(
 ) -> None:
     user: User | None = message.from_user
 
-    if user:
-        if user.username:
-            greeting: str = f"👋 Привет, @{user.username}!"
-        else:
-            greeting: str = f"👋 Привет, {user.first_name}!"
-    else:
-        greeting: str = "👋 Привет!"
-
-    welcome_message: str = (
-        f"{greeting}\n\n"
-        f"HimayaVPN - это лучший выбор из всех VPN на рынке🥇\n"
-        f"Наши приоритеты - безопасность, скорость, стабильность🛡"
-    )
-    await message.answer(text=welcome_message)
-
     if user is None:
         await message.answer(text="⚠️ Не удалось определить пользователя Telegram ⚠️")
         return
@@ -132,8 +117,14 @@ async def cmd_start(
     if trial_message is not None:
         await message.answer(text=trial_message)
 
+    if user.username:
+        greeting: str = f"👋 Привет, @{user.username}!"
+    else:
+        greeting: str = f"👋 Привет, {user.full_name}!"
+
     main_message: str = (
-        f"Для продолжения работы выберите действие ниже"
+        f"{greeting}\n\n"
+        f"👨‍💻 Для продолжения работы выберите действие ниже"
     )
     await message.answer(text=main_message, reply_markup=get_main_menu_inline_keyboard())
 
@@ -142,7 +133,15 @@ async def cmd_start(
 async def callback_back_to_main_menu(callback: CallbackQuery) -> None:
     await callback.answer()
 
+    user: User = callback.from_user
+
+    if user.username:
+        greeting: str = f"👋 Привет, @{user.username}!"
+    else:
+        greeting: str = f"👋 Привет, {user.full_name}!"
+
     main_message: str = (
-        f"Для продолжения работы выберите действие ниже"
+        f"{greeting}\n\n"
+        f"👨‍💻 Для продолжения работы выберите действие ниже"
     )
     await callback.message.edit_text(text=main_message, reply_markup=get_main_menu_inline_keyboard())
