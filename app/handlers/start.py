@@ -5,7 +5,6 @@ from aiogram.filters.command import CommandStart
 
 from aiogram.types import Message, CallbackQuery
 from aiogram.types.user import User
-from typing import LiteralString
 
 from app.keyboards.main_menu import get_main_menu_inline_keyboard
 
@@ -46,7 +45,7 @@ async def cmd_start(
     else:
         greeting: str = "👋 Привет!"
 
-    welcome_message: LiteralString = (
+    welcome_message: str = (
         f"{greeting}\n\n"
         f"HimayaVPN - это лучший выбор из всех VPN на рынке🥇\n"
         f"Наши приоритеты - безопасность, скорость, стабильность🛡"
@@ -133,7 +132,7 @@ async def cmd_start(
     if trial_message is not None:
         await message.answer(text=trial_message)
 
-    main_message: LiteralString = (
+    main_message: str = (
         f"Для продолжения работы выберите действие ниже"
     )
     await message.answer(text=main_message, reply_markup=get_main_menu_inline_keyboard())
@@ -143,7 +142,7 @@ async def cmd_start(
 async def callback_back_to_main_menu(callback: CallbackQuery) -> None:
     await callback.answer()
 
-    main_message: LiteralString = (
+    main_message: str = (
         f"Для продолжения работы выберите действие ниже"
     )
     await callback.message.edit_text(text=main_message, reply_markup=get_main_menu_inline_keyboard())

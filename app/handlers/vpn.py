@@ -3,7 +3,6 @@ import logging
 from aiogram import Router, F
 
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
-from typing import LiteralString
 
 from app.keyboards.common import get_back_to_main_menu_inline_keyboard
 from app.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
@@ -145,7 +144,7 @@ async def callback_tariff_selected(
     except VpnKeyCreationInProgressError:
         await session.rollback()
 
-        vpn_key_creation_in_progress_message: LiteralString = (
+        vpn_key_creation_in_progress_message: str = (
             f"⏳ Немного подождите, VPN-ключ уже создаётся..."
         )
         await callback.message.edit_text(
@@ -163,7 +162,7 @@ async def callback_tariff_selected(
             tariff_code,
         )
 
-        vpn_key_creation_failed_message: LiteralString = (
+        vpn_key_creation_failed_message: str = (
             f"⛓️‍💥 Не удалось завершить создание VPN-ключа\n\n"
             f"Попробуйте ещё раз через пару минут"
         )
@@ -176,7 +175,7 @@ async def callback_tariff_selected(
     except VpnKeyDisabledError:
         await session.rollback()
 
-        vpn_key_disabled_message: LiteralString = (
+        vpn_key_disabled_message: str = (
             f"Ваш VPN-ключ отключён. Срок действия вашего тарифа истёк ⏱️\n\n"
             f"Чтобы продолжить использовать VPN-ключ, выберите один из доступных тарифов"
         )
@@ -189,7 +188,7 @@ async def callback_tariff_selected(
     except VpnKeyRenewalInProgressError:
         await session.rollback()
 
-        vpn_key_renewal_in_progress_message: LiteralString = (
+        vpn_key_renewal_in_progress_message: str = (
             f"⏳ Немного подождите, VPN-ключ уже продлевается..."
         )
         await callback.message.edit_text(
@@ -207,7 +206,7 @@ async def callback_tariff_selected(
             tariff_code,
         )
 
-        vpn_key_renewal_failed_message: LiteralString = (
+        vpn_key_renewal_failed_message: str = (
             f"⛓️‍💥 Не удалось завершить продление VPN-ключа\n\n"
             f"Попробуйте ещё раз через пару минут"
         )
@@ -226,7 +225,7 @@ async def callback_tariff_selected(
 
         await session.rollback()
 
-        failed_vpn_key_creating_message: LiteralString = (
+        failed_vpn_key_creating_message: str = (
             f"Не удалось создать VPN-ключ ☹️\n\n"
             f"Обратитесь в тех. поддержку: @miolerr"
         )
@@ -236,7 +235,7 @@ async def callback_tariff_selected(
         )
         return
 
-    success_vpn_key_creating_message: LiteralString = (
+    success_vpn_key_creating_message: str = (
         f"✅ VPN-ключ готов!\n\n"
         f"Действует до:\n"
         f"{vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"

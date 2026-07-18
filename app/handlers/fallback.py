@@ -1,7 +1,6 @@
 from aiogram import Router
 
 from aiogram.types import Message
-from typing import LiteralString
 
 from app.keyboards.common import get_back_to_main_menu_inline_keyboard
 
@@ -11,7 +10,7 @@ router = Router()
 
 @router.message()
 async def cmd_help(message: Message) -> None:
-    wrong_message: LiteralString = (
+    wrong_message: str = (
         f"⚠️ Введено некорректное сообщение\n\n"
         f"Если у вас возникли какие-либо сложности или вопросы, напишите в тех. поддержку: @miolerr"
     )
