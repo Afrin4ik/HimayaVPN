@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.repositories.vpn_key_repository import VpnKeyRepository
+from app.database.repositories.vpn_key_repository import VpnKeyRepository
 
 
 logger = logging.getLogger(__name__)

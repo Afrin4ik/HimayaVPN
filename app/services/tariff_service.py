@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Tariff
-from app.repositories.tariff_repository import TariffRepository
+from app.database.repositories.tariff_repository import TariffRepository
 from app.services.exceptions import (
     TariffUnavailableError,
     TariffConfigurationError,

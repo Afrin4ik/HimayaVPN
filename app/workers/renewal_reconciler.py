@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.models import VpnKey
 from app.integrations.xui import AsyncXUI, XUIConfig
-from app.repositories.vpn_key_repository import VpnKeyRepository
+from app.database.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.vpn_key_service import VpnKeyService, VPN_KEY_RENEWING_TIMEOUT
 
 

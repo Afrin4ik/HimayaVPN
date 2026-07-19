@@ -18,7 +18,7 @@ from app.database.models import (
     VPN_KEY_DISABLED,
     VPN_KEY_RENEWING,
 )
-from app.repositories.vpn_key_repository import VpnKeyRepository
+from app.database.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.user_service import UserService
 from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
 

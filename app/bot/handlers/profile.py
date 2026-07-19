@@ -9,8 +9,8 @@ from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.user_repository import UserRepository
-from app.repositories.vpn_key_repository import VpnKeyRepository
+from app.database.repositories.user_repository import UserRepository
+from app.database.repositories.vpn_key_repository import VpnKeyRepository
 from app.database.models import (
     User as DatabaseUser,
     VpnKey,

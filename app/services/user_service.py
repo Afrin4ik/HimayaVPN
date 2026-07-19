@@ -1,7 +1,7 @@
 from aiogram.types import User as TelegramUser
 
 from app.database.models import User
-from app.repositories.user_repository import UserRepository
+from app.database.repositories.user_repository import UserRepository
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
