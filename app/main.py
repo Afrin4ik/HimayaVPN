@@ -38,6 +38,7 @@ async def main() -> None:
     database: Database = create_database(database_url=settings.database_url)
 
     dp = Dispatcher()
+    dp["settings"] = settings
     dp["xui_config"] = xui_config
     dp["xui"] = xui
     dp.update.middleware(

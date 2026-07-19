@@ -21,6 +21,8 @@ from app.services.exceptions import (
     TariffServiceError,
 )
 
+from app.config import Settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ async def cmd_start(
     session: AsyncSession,
     xui: AsyncXUI,
     xui_config: XUIConfig,
+    settings: Settings,
 ) -> None:
     user: User | None = message.from_user
 
@@ -131,4 +134,7 @@ async def cmd_start(
         f"{greeting}\n\n"
         f"👨‍💻 Для продолжения работы выберите действие ниже"
     )
-    await message.answer(text=main_message, reply_markup=get_main_menu_inline_keyboard())
+    await message.answer(
+        text=main_message,
+        reply_markup=get_main_menu_inline_keyboard(support_url=settings.tg_support_url)
+    )

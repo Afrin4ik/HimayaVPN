@@ -4,7 +4,7 @@ from aiogram import Router, F
 
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
-from app.config import get_settings
+from app.config import Settings
 
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
@@ -27,9 +27,6 @@ from app.services.exceptions import (
 )
 
 
-SUPPORT_USERNAME: str = get_settings().tg_support_username
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +37,7 @@ router = Router()
 async def callback_connect_vpn(
     callback: CallbackQuery,
     session: AsyncSession,
+    settings: Settings
 ) -> None:
     await callback.answer()
 
@@ -59,7 +57,7 @@ async def callback_connect_vpn(
         await callback.message.edit_text(
             text=(
                 f"⛓️‍💥 Не удалось загрузить тарифы\n\n"
-                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {settings.tg_support_username}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -77,7 +75,7 @@ async def callback_connect_vpn(
         await callback.message.edit_text(
             text=(
                 f"⛓️‍💥 Не удалось загрузить тарифы\n\n"
-                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {settings.tg_support_username}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -88,7 +86,7 @@ async def callback_connect_vpn(
         await callback.message.edit_text(
             text=(
                 f"🚨 На данный момент нет доступных тарифов\n\n"
-                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {settings.tg_support_username}"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
@@ -110,6 +108,7 @@ async def callback_tariff_selected(
     session: AsyncSession,
     xui: AsyncXUI,
     xui_config: XUIConfig,
+    settings: Settings,
 ) -> None:
     tariff_code: str = callback_data.tariff_code
 
@@ -237,7 +236,7 @@ async def callback_tariff_selected(
 
         failed_vpn_key_creating_message: str = (
             f"Не удалось создать VPN-ключ ☹️\n\n"
-            f"Обратитесь в тех. поддержку: {SUPPORT_USERNAME}"
+            f"Обратитесь в тех. поддержку: {settings.tg_support_username}"
         )
         await callback.message.edit_text(
             text=failed_vpn_key_creating_message,
