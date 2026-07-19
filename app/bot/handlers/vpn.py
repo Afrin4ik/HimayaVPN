@@ -6,8 +6,8 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
 from app.config import get_settings
 
-from app.keyboards.common import get_back_to_main_menu_inline_keyboard
-from app.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
+from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
+from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

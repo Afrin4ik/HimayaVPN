@@ -3,10 +3,10 @@ import logging
 from aiogram import Router, F
 from aiogram.filters.command import CommandStart
 
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from aiogram.types.user import User
 
-from app.keyboards.main_menu import get_main_menu_inline_keyboard
+from app.bot.keyboards.main_menu import get_main_menu_inline_keyboard
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -132,21 +132,3 @@ async def cmd_start(
         f"👨‍💻 Для продолжения работы выберите действие ниже"
     )
     await message.answer(text=main_message, reply_markup=get_main_menu_inline_keyboard())
-
-
-@router.callback_query(F.data == "back_to_main_menu")
-async def callback_back_to_main_menu(callback: CallbackQuery) -> None:
-    await callback.answer()
-
-    user: User = callback.from_user
-
-    if user.username:
-        greeting: str = f"👋 Привет, @{user.username}!"
-    else:
-        greeting: str = f"👋 Привет, {user.full_name}!"
-
-    main_message: str = (
-        f"{greeting}\n\n"
-        f"👨‍💻 Для продолжения работы выберите действие ниже"
-    )
-    await callback.message.edit_text(text=main_message, reply_markup=get_main_menu_inline_keyboard())

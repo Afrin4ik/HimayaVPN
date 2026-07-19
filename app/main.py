@@ -8,10 +8,10 @@ from aiogram.types import BotCommand
 from contextlib import suppress
 
 from app.config import Settings, get_settings
-from app.handlers import router
+from app.bot.router import build_router
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
-from app.middlewares.database import DatabaseSessionMiddleware
+from app.bot.middlewares.database import DatabaseSessionMiddleware
 
 from app.workers.renewal_reconciler import run_renewal_reconciler
 from app.workers.expiration_reconciler import run_expiration_reconciler
@@ -48,7 +48,7 @@ async def main() -> None:
     dp["xui_config"] = xui_config
     dp["xui"] = xui
     dp.update.middleware(middleware=DatabaseSessionMiddleware(session_factory=async_session_factory))
-    dp.include_router(router=router)
+    dp.include_router(router=build_router())
 
     renewal_reconciler_task: asyncio.Task[None] = asyncio.create_task(
         coro=run_renewal_reconciler(

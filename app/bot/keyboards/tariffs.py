@@ -3,7 +3,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 
 from app.database.models import Tariff
-from app.keyboards.common import get_back_to_main_menu_inline_keyboard
+from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 
 
 class TariffCallback(CallbackData, prefix="tariff"):

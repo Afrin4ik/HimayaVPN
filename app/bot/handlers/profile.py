@@ -5,7 +5,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.types.user import User
 
-from app.keyboards.common import get_back_to_main_menu_inline_keyboard
+from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
