@@ -8,6 +8,7 @@ from typing import Any
 from app.config import Settings, get_settings
 from app.database.connection import async_session_factory, close_database
 from app.integrations.xui import AsyncXUI, XUIConfig
+from app.integrations.xui.factory import build_xui_config
 from app.database.repositories.vpn_key_repository import VpnKeyRepository
 
 
@@ -36,19 +37,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def build_xui_config(settings: Settings) -> XUIConfig:
-    return XUIConfig(
-        base_url=settings.xui_base_url,
-        web_base_path=settings.xui_web_base_path,
-        api_token=settings.xui_api_token,
-        subscription_base_url=settings.xui_subscription_base_url,
-        subscription_path=settings.xui_subscription_path,
-        default_inbound_ids=settings.xui_default_inbound_ids,
-        default_limit_ip=settings.xui_default_limit_ip,
-        default_total_gb=settings.xui_default_total_gb,
-    )
 
 
 def get_client_created_at_ms(client: dict[str, Any]) -> int | None:

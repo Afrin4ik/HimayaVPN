@@ -1,0 +1,2 @@
+class XUIException(Exception):
+    pass

@@ -1,49 +1,15 @@
+from app.integrations.xui.config import XUIConfig
+from app.integrations.xui.dto import CreatedXUIClient, UpdatedXUIClient
+from app.integrations.xui.exceptions import XUIException
+
 import aiohttp
 import json
 import uuid
 import time
 import secrets
-from dataclasses import dataclass
 from urllib.parse import quote
 from copy import deepcopy
 from typing import Self, Any
-
-
-@dataclass(frozen=True)
-class XUIConfig:
-    base_url: str
-    web_base_path: str
-    api_token: str
-    subscription_base_url: str
-    subscription_path: str
-    default_inbound_ids: list[int]
-    default_limit_ip: int
-    default_total_gb: int
-
-
-@dataclass(frozen=True)
-class CreatedXUIClient:
-    email: str
-    uuid: str
-    password: str
-    hysteria_auth: str
-    sub_id: str
-    inbound_ids: list[int]
-    raw_response: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class UpdatedXUIClient:
-    email: str
-    uuid: str | None
-    inbound_ids: list[int]
-    client: dict[str, Any]
-    raw_response: dict[str, Any]
-    traffic_reset_response: dict[str, Any] | None = None
-
-
-class XUIException(Exception):
-    pass
 
 
 class AsyncXUI:
