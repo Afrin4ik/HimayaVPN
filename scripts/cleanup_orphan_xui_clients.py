@@ -5,8 +5,10 @@ import time
 
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.config import Settings, get_settings
-from app.database.connection import async_session_factory, close_database
+from app.database.connection import Database, create_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.integrations.xui.factory import build_xui_config
 from app.database.repositories.vpn_key_repository import VpnKeyRepository
@@ -63,24 +65,28 @@ def get_client_created_at_ms(client: dict[str, Any]) -> int | None:
     return None
 
 
-async def get_database_xui_emails() -> set[str]:
-    async with async_session_factory() as session:
+async def get_database_xui_emails(
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+) -> set[str]:
+    async with session_factory() as session:
         vpn_key_repository = VpnKeyRepository(session=session)
         return await vpn_key_repository.get_all_xui_emails()
 
 
 async def cleanup_orphans(
         *,
+        settings: Settings,
+        session_factory: async_sessionmaker[AsyncSession],
         apply_changes: bool,
         grace_period_seconds: int,
 ) -> None:
     if grace_period_seconds < 0:
         raise ValueError("grace_period_seconds cannot be negative")
 
-    settings: Settings = get_settings()
     xui_config: XUIConfig = build_xui_config(settings=settings)
 
-    database_emails: set[str] = await get_database_xui_emails()
+    database_emails: set[str] = await get_database_xui_emails(session_factory=session_factory)
 
     now_ms = int(time.time() * 1000)
     grace_period_ms = grace_period_seconds * 1000
@@ -172,13 +178,20 @@ async def cleanup_orphans(
 async def main() -> None:
     arguments: argparse.Namespace = parse_arguments()
 
+    settings: Settings = get_settings()
+
+    database: Database = create_database(database_url=settings.database_url)
+
     try:
         await cleanup_orphans(
+            settings=settings,
+            session_factory=database.session_factory,
             apply_changes=arguments.apply,
             grace_period_seconds=arguments.grace_seconds,
         )
+
     finally:
-        await close_database()
+        await database.close()
 
 
 if __name__ == "__main__":

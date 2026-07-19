@@ -9,7 +9,7 @@ from contextlib import suppress
 
 from app.config import Settings, get_settings
 from app.bot.router import build_router
-from app.database.connection import async_session_factory, close_database
+from app.database.connection import Database, create_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.integrations.xui.factory import build_xui_config
 from app.bot.middlewares.database import DatabaseSessionMiddleware
@@ -22,7 +22,6 @@ async def main() -> None:
     settings: Settings = get_settings()
 
     bot = Bot(token=settings.bot_token)
-
     await bot.set_my_commands(
         commands=[
             BotCommand(
@@ -36,15 +35,21 @@ async def main() -> None:
     xui = AsyncXUI(config=xui_config)
     await xui.start()
 
+    database: Database = create_database(database_url=settings.database_url)
+
     dp = Dispatcher()
     dp["xui_config"] = xui_config
     dp["xui"] = xui
-    dp.update.middleware(middleware=DatabaseSessionMiddleware(session_factory=async_session_factory))
+    dp.update.middleware(
+        middleware=DatabaseSessionMiddleware(
+            session_factory=database.session_factory,
+        )
+    )
     dp.include_router(router=build_router())
 
     renewal_reconciler_task: asyncio.Task[None] = asyncio.create_task(
         coro=run_renewal_reconciler(
-            session_factory=async_session_factory,
+            session_factory=database.session_factory,
             xui=xui,
             xui_config=xui_config,
         ),
@@ -53,7 +58,7 @@ async def main() -> None:
 
     expiration_reconciler_task: asyncio.Task[None] = asyncio.create_task(
         coro=run_expiration_reconciler(
-            session_factory=async_session_factory,
+            session_factory=database.session_factory,
         ),
         name="vpn-expiration-reconciler",
     )
@@ -80,7 +85,7 @@ async def main() -> None:
                 await task
 
         await xui.close()
-        await close_database()
+        await database.close()
 
 
 if __name__ == "__main__":

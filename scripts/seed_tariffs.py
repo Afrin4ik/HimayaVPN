@@ -2,7 +2,8 @@ import asyncio
 
 from sqlalchemy.dialects.postgresql import insert
 
-from app.database.connection import async_session_factory
+from app.config import Settings, get_settings
+from app.database.connection import Database, create_database
 from app.database.models import Tariff
 
 TARIFFS = [
@@ -54,17 +55,25 @@ TARIFFS = [
 ]
 
 
-async def main():
-    async with async_session_factory() as session:
-        for tariff in TARIFFS:
-            stmt = insert(table=Tariff).values(**tariff)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[Tariff.code],
-                set_=tariff,
-            )
-            await session.execute(statement=stmt)
+async def main() -> None:
+    settings: Settings = get_settings()
 
-        await session.commit()
+    database: Database = create_database(database_url=settings.database_url)
+
+    try:
+        async with database.session_factory() as session:
+            for tariff in TARIFFS:
+                stmt = insert(table=Tariff).values(**tariff)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[Tariff.code],
+                    set_=tariff,
+                )
+                await session.execute(statement=stmt)
+
+            await session.commit()
+
+    finally:
+        await database.close()
 
 
 if __name__ == "__main__":
