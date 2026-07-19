@@ -1,0 +1,10 @@
+VPN_KEY_CREATING = "creating"
+VPN_KEY_ACTIVE = "active"
+VPN_KEY_FAILED = "failed"
+VPN_KEY_DISABLED = "disabled"
+VPN_KEY_RENEWING = "renewing"
+
+ORDER_CREATED = "created"
+ORDER_PAID = "paid"
+ORDER_CANCELLED = "cancelled"
+ORDER_FAILED = "failed"
