@@ -8,12 +8,13 @@ from app.config import Settings
 
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
+from app.bot.mappers import map_telegram_user
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.xui import AsyncXUI, XUIConfig
 
-from app.database.models import VpnKey, Tariff
+from app.services.dto import VpnKeyAccess, TariffOption
 from app.services.vpn_key_service import VpnKeyService
 from app.services.tariff_service import TariffService
 
@@ -44,7 +45,7 @@ async def callback_connect_vpn(
     tariff_service = TariffService(session=session)
 
     try:
-        tariffs: list[Tariff] = await tariff_service.get_public_active_tariffs()
+        tariffs: list[TariffOption] = await tariff_service.get_public_active_tariffs()
 
     except TariffServiceError:
         await session.rollback()
@@ -120,8 +121,8 @@ async def callback_tariff_selected(
             xui=xui,
             xui_config=xui_config,
         )
-        vpn_key: VpnKey = await vpn_key_service.get_or_create_vpn_key_for_user(
-            telegram_user=callback.from_user,
+        vpn_key: VpnKeyAccess = await vpn_key_service.get_or_create_vpn_key_for_user(
+            telegram_user=map_telegram_user(user=callback.from_user),
             tariff_code=tariff_code,
         )
 

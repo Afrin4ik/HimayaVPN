@@ -1,9 +1,12 @@
+from collections.abc import Sequence
+
+from aiogram.filters.callback_data import CallbackData
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.filters.callback_data import CallbackData
 
-from app.database.models import Tariff
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
+
+from app.services.dto import TariffOption
 
 
 class TariffCallback(CallbackData, prefix="tariff"):
@@ -12,7 +15,7 @@ class TariffCallback(CallbackData, prefix="tariff"):
 
 def get_tariffs_inline_keyboard(
         *,
-        tariffs: list[Tariff],
+        tariffs: Sequence[TariffOption],
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 

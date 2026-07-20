@@ -6,12 +6,15 @@ from aiogram.filters.command import CommandStart
 from aiogram.types import Message
 from aiogram.types.user import User
 
-from app.bot.keyboards.main_menu import get_main_menu_inline_keyboard
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import VpnKey
+from app.bot.keyboards.main_menu import get_main_menu_inline_keyboard
+from app.bot.mappers import map_telegram_user
+
+from app.config import Settings
+
 from app.integrations.xui import AsyncXUI, XUIConfig
+from app.services.dto import VpnKeyAccess
 from app.services.vpn_key_service import VpnKeyService
 from app.services.exceptions import (
     VpnKeyCreationInProgressError,
@@ -20,8 +23,6 @@ from app.services.exceptions import (
     VpnKeyDisabledError,
     TariffServiceError,
 )
-
-from app.config import Settings
 
 
 logger = logging.getLogger(__name__)
@@ -50,11 +51,13 @@ async def cmd_start(
         xui_config=xui_config,
     )
 
-    trial_vpn_key: VpnKey | None = None
+    trial_vpn_key: VpnKeyAccess | None = None
     trial_message: str | None = None
 
     try:
-        trial_vpn_key = await vpn_key_service.create_trial_vpn_key_for_new_user(telegram_user=user)
+        trial_vpn_key = await vpn_key_service.create_trial_vpn_key_for_new_user(
+            telegram_user=map_telegram_user(user=user)
+        )
 
     except VpnKeyCreationInProgressError:
         await session.rollback()

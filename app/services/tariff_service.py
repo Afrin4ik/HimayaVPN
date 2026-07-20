@@ -7,6 +7,8 @@ from app.services.exceptions import (
     TariffConfigurationError,
 )
 
+from app.services.dto import TariffOption
+
 
 TRIAL_TARIFF_CODE = "trial_3_days"
 
@@ -69,15 +71,23 @@ class TariffService:
 
         return self._require_valid_tariff(tariff=tariff)
 
-    async def get_public_active_tariffs(self) -> list[Tariff]:
+    async def get_public_active_tariffs(self) -> list[TariffOption]:
         tariffs: list[Tariff] = await self.tariff_repository.get_active_tariffs()
 
-        public_tariffs: list[Tariff] = []
+        public_tariffs: list[TariffOption] = []
 
         for tariff in tariffs:
             if tariff.code == TRIAL_TARIFF_CODE:
                 continue
 
-            public_tariffs.append(self._require_valid_tariff(tariff=tariff))
+            valid_tariff: Tariff = self._require_valid_tariff(tariff=tariff)
+
+            public_tariffs.append(
+                TariffOption(
+                    code=valid_tariff.code,
+                    title=valid_tariff.title,
+                    price_rub=valid_tariff.price_rub,
+                )
+            )
 
         return public_tariffs

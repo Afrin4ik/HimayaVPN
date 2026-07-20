@@ -3,10 +3,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from aiogram.types import User as TelegramUser
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.dto import TelegramUserData, VpnKeyAccess
 from app.integrations.xui import AsyncXUI, CreatedXUIClient, XUIConfig
 from app.database.models import (
     User,
@@ -69,6 +69,26 @@ class VpnKeyService:
             raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} is not active (status={vpn_key.status})")
 
         return self._require_vpn_key_credentials(vpn_key=vpn_key)
+
+    def _to_vpn_key_access(
+            self,
+            *,
+            vpn_key: VpnKey,
+    ) -> VpnKeyAccess:
+        vpn_key = self._require_usable_active_vpn_key(vpn_key=vpn_key)
+
+        if vpn_key.subscription_url is None:
+            raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} does not have subscription_url")
+
+        if vpn_key.expires_at is None:
+            raise VpnKeyInvalidStateError(f"VPN key {vpn_key.id} does not have expires_at")
+
+        return VpnKeyAccess(
+            id=vpn_key.id,
+            subscription_url=vpn_key.subscription_url,
+            expires_at=vpn_key.expires_at,
+        )
+
 
     @staticmethod
     def _normalize_expires_at(expires_at: datetime) -> datetime:
@@ -166,21 +186,26 @@ class VpnKeyService:
     async def create_trial_vpn_key_for_new_user(
             self,
             *,
-            telegram_user: TelegramUser,
-    ) -> VpnKey | None:
-        return await self._get_create_or_renew_vpn_key(
+            telegram_user: TelegramUserData,
+    ) -> VpnKeyAccess | None:
+        vpn_key: VpnKey | None = await self._get_create_or_renew_vpn_key(
             telegram_user=telegram_user,
             tariff_code=TRIAL_TARIFF_CODE,
             allow_renewal=False,
             require_trial=True,
         )
 
+        if vpn_key is None:
+            return None
+
+        return self._to_vpn_key_access(vpn_key=vpn_key)
+
     async def get_or_create_vpn_key_for_user(
             self,
             *,
-            telegram_user: TelegramUser,
+            telegram_user: TelegramUserData,
             tariff_code: str,
-    ) -> VpnKey:
+    ) -> VpnKeyAccess:
         vpn_key: VpnKey | None = await self._get_create_or_renew_vpn_key(
             telegram_user=telegram_user,
             tariff_code=tariff_code,
@@ -191,12 +216,12 @@ class VpnKeyService:
         if vpn_key is None:
             raise VpnKeyInvalidStateError("Paid VPN key operation unexpectedly returned None")
 
-        return vpn_key
+        return self._to_vpn_key_access(vpn_key=vpn_key)
 
     async def _get_create_or_renew_vpn_key(
             self,
             *,
-            telegram_user: TelegramUser,
+            telegram_user: TelegramUserData,
             tariff_code: str,
             allow_renewal: bool,
             require_trial: bool,
