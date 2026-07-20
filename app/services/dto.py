@@ -24,3 +24,10 @@ class VpnKeyAccess:
     id: int
     subscription_url: str
     expires_at: datetime
+
+@dataclass(frozen=True, slots=True)
+class VpnKeyProfile:
+    subscription_url: str | None
+    status: str
+    tariff_title: str
+    expires_at: datetime | None

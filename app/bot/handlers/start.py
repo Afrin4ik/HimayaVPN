@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import get_main_menu_inline_keyboard
 from app.bot.mappers import map_telegram_user
+from app.bot.presenters.main_menu import render_main_menu
 
 from app.config import Settings
 
@@ -128,15 +129,8 @@ async def cmd_start(
     if trial_message is not None:
         await message.answer(text=trial_message)
 
-    if user.username:
-        greeting: str = f"👋 Привет, @{user.username}!"
-    else:
-        greeting: str = f"👋 Привет, {user.full_name}!"
+    main_message: str = render_main_menu(user=user)
 
-    main_message: str = (
-        f"{greeting}\n\n"
-        f"👨‍💻 Для продолжения работы выберите действие ниже"
-    )
     await message.answer(
         text=main_message,
         reply_markup=get_main_menu_inline_keyboard(support_url=settings.tg_support_url)
