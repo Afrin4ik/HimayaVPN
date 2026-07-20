@@ -1,90 +1,63 @@
 import logging
-
 import asyncio
 
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
-from contextlib import suppress
-
 from app.config import Settings, get_settings
 from app.bot.router import build_router
+from app.bot.middlewares.database import DatabaseSessionMiddleware
 from app.database.connection import Database, create_database
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.integrations.xui.factory import build_xui_config
-from app.bot.middlewares.database import DatabaseSessionMiddleware
-
-from app.workers.renewal_reconciler import run_renewal_reconciler
-from app.workers.expiration_reconciler import run_expiration_reconciler
 
 
 async def main() -> None:
     settings: Settings = get_settings()
 
-    bot = Bot(token=settings.bot_token)
-    await bot.set_my_commands(
-        commands=[
-            BotCommand(
-                command="start",
-                description="Запустить бота",
-            ),
-        ]
-    )
+    database: Database = create_database(database_url=settings.database_url)
 
     xui_config: XUIConfig = build_xui_config(settings=settings)
     xui = AsyncXUI(config=xui_config)
-    await xui.start()
 
-    database: Database = create_database(database_url=settings.database_url)
-
-    dp = Dispatcher()
-    dp["settings"] = settings
-    dp["xui_config"] = xui_config
-    dp["xui"] = xui
-    dp.update.middleware(
-        middleware=DatabaseSessionMiddleware(
-            session_factory=database.session_factory,
-        )
-    )
-    dp.include_router(router=build_router())
-
-    renewal_reconciler_task: asyncio.Task[None] = asyncio.create_task(
-        coro=run_renewal_reconciler(
-            session_factory=database.session_factory,
-            xui=xui,
-            xui_config=xui_config,
-        ),
-        name="vpn-renewal-reconciler",
-    )
-
-    expiration_reconciler_task: asyncio.Task[None] = asyncio.create_task(
-        coro=run_expiration_reconciler(
-            session_factory=database.session_factory,
-        ),
-        name="vpn-expiration-reconciler",
-    )
-
-    background_tasks: list[asyncio.Task[None]] = [
-        renewal_reconciler_task,
-        expiration_reconciler_task,
-    ]
+    bot = Bot(token=settings.bot_token)
 
     try:
+        await xui.start()
+
+        await bot.set_my_commands(
+            commands=[
+                BotCommand(
+                    command="start",
+                    description="Запустить бота",
+                ),
+            ]
+        )
+
         await bot.delete_webhook(drop_pending_updates=True)
 
-        await dp.start_polling(
+        dispatcher = Dispatcher()
+
+        dispatcher["settings"] = settings
+        dispatcher["xui_config"] = xui_config
+        dispatcher["xui"] = xui
+
+        dispatcher.update.middleware(
+            middleware=DatabaseSessionMiddleware(
+                session_factory=database.session_factory,
+            )
+        )
+
+        dispatcher.include_router(router=build_router())
+
+        await dispatcher.start_polling(
             bot,
-            allowed_updates=dp.resolve_used_update_types(),
+            allowed_updates=dispatcher.resolve_used_update_types(),
+            close_bot_session=False,
         )
 
     finally:
-        for task in background_tasks:
-            task.cancel()
-
-        for task in background_tasks:
-            with suppress(asyncio.CancelledError):
-                await task
-
+        await bot.session.close()
         await xui.close()
         await database.close()
 
@@ -95,4 +68,5 @@ if __name__ == "__main__":
         format="%(asctime)s,%(msecs)03d | %(levelname)s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
     asyncio.run(main=main())
