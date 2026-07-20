@@ -25,6 +25,7 @@ class VpnKeyAccess:
     subscription_url: str
     expires_at: datetime
 
+
 @dataclass(frozen=True, slots=True)
 class VpnKeyProfile:
     subscription_url: str | None

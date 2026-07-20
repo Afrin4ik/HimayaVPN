@@ -10,7 +10,7 @@ def render_main_menu(
     if user.username:
         greeting = f"👋 Привет, @{user.username}!"
     else:
-        greeting = f"👋 Привет, {user.full_name}"
+        greeting = f"👋 Привет, {user.full_name}!"
 
     return (
         f"{greeting}\n\n"
