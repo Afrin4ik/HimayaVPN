@@ -97,6 +97,9 @@ class VpnKey(Base, TimestampMixin):
     pending_tariff_id: Mapped[int | None] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=True)
     pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    pending_order_id: Mapped[int | None] = mapped_column(ForeignKey(column="orders.id", ondelete="SET NULL"), unique=True, nullable=True)
+    last_fulfilled_order_id: Mapped[int | None] = mapped_column(ForeignKey(column="orders.id", ondelete="SET NULL"), unique=True, nullable=True)
+
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="vpn_key")

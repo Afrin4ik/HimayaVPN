@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     CheckConstraint,
     text,
+    Text,
     Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,7 +32,7 @@ class Order(Base, TimestampMixin):
     __tablename__ = "orders"
     __table_args__ = (
         CheckConstraint(
-            sqltext="status in ('created', 'paid', 'cancelled', 'failed')",
+            sqltext="status in ('created', 'paid', 'fulfilling', 'fulfilled', 'cancelled', 'failed')",
             name="ck_orders_status",
         ),
         CheckConstraint(
@@ -50,16 +51,27 @@ class Order(Base, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
 
     user_id: Mapped[int] = mapped_column(ForeignKey(column="users.id", ondelete="CASCADE"), nullable=False)
-    tariff_id: Mapped[int] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=False)
 
+    tariff_id: Mapped[int] = mapped_column(ForeignKey(column="tariffs.id", ondelete="RESTRICT"), nullable=False)
     amount_rub: Mapped[int] = mapped_column(Integer, nullable=False)
+
     status: Mapped[str] = mapped_column(String(16), server_default=ORDER_CREATED, nullable=False)
+    confirmation_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    fulfillment_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fulfillment_attempts: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    fulfillment_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notification_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
-    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payload: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="orders")

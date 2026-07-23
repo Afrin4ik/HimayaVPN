@@ -13,6 +13,8 @@ from app.database.models.statuses import (
     ORDER_PAID,
     ORDER_CANCELLED,
     ORDER_FAILED,
+    ORDER_FULFILLING,
+    ORDER_FULFILLED,
 )
 
 __all__ = [
@@ -29,4 +31,6 @@ __all__ = [
     "ORDER_PAID",
     "ORDER_CANCELLED",
     "ORDER_FAILED",
+    "ORDER_FULFILLING",
+    "ORDER_FULFILLED",
 ]
