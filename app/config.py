@@ -22,6 +22,13 @@ class Settings:
     database_url: str
     tg_support_username: str
     tg_support_url: str
+    yookassa_shop_id: str
+    yookassa_secret_key: str
+    yookassa_return_url: str
+    yookassa_webhook_secret: str
+    yookassa_webhook_host: str
+    yookassa_webhook_port: int
+    yookassa_allow_test_payments: bool
 
 
 def _get_required_env(key: str) -> str:
@@ -49,6 +56,17 @@ def _parse_int(value: str) -> int:
     except ValueError:
         raise ValueError(f"Error converting to int: {value.strip()} is not a number")
 
+def _parse_bool(value: str) -> bool:
+    normalized: str = value.strip().lower()
+
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise ValueError(f"Cannot convert {value!r} to bool")
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings(
@@ -64,4 +82,11 @@ def get_settings() -> Settings:
         database_url=_get_required_env(key="DATABASE_URL"),
         tg_support_username=_get_required_env(key="TG_SUPPORT_USERNAME"),
         tg_support_url=_get_required_env(key="TG_SUPPORT_URL"),
+        yookassa_shop_id=_get_required_env(key="YOOKASSA_SHOP_ID"),
+        yookassa_secret_key=_get_required_env(key="YOOKASSA_SECRET_KEY"),
+        yookassa_return_url=_get_required_env(key="YOOKASSA_RETURN_URL"),
+        yookassa_webhook_secret=_get_required_env(key="YOOKASSA_WEBHOOK_SECRET"),
+        yookassa_webhook_host=_get_required_env(key="YOOKASSA_WEBHOOK_HOST"),
+        yookassa_webhook_port=_parse_int(value=_get_required_env(key="YOOKASSA_WEBHOOK_PORT")),
+        yookassa_allow_test_payments=_parse_bool(value=_get_required_env(key="YOOKASSA_ALLOW_TEST_PAYMENTS")),
     )
