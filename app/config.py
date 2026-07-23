@@ -58,14 +58,12 @@ def _parse_int(value: str) -> int:
 
 def _parse_bool(value: str) -> bool:
     normalized: str = value.strip().lower()
-
     if normalized in {"1", "true", "yes", "on"}:
         return True
-
     if normalized in {"0", "false", "no", "off"}:
         return False
-
     raise ValueError(f"Cannot convert {value!r} to bool")
+
 
 @lru_cache
 def get_settings() -> Settings:
