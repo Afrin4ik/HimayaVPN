@@ -32,3 +32,10 @@ class VpnKeyProfile:
     status: str
     tariff_title: str
     expires_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentCheckout:
+    order_id: int
+    confirmation_url: str
+    amount_rub: int
