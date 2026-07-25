@@ -1,31 +1,32 @@
-from collections.abc import Sequence
-
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types.inline_keyboard_markup import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 
-from app.services.dto import TariffOption
+
+class PaymentStatusCallback(CallbackData, prefix="payment"):
+    order_id: int
 
 
-class TariffCallback(CallbackData, prefix="tariff"):
-    tariff_code: str
-
-
-def get_tariffs_inline_keyboard(
+def get_payment_inline_keyboard(
         *,
-        tariffs: Sequence[TariffOption],
+        confirmation_url: str,
+        order_id: int,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    for tariff in tariffs:
-        builder.button(
-            text=f"{tariff.title} - {tariff.price_rub}₽",
-            callback_data=TariffCallback(
-                tariff_code=tariff.code,
-            ),
-        )
+    builder.button(
+        text="💳 Перейти к оплате",
+        url=confirmation_url,
+    )
+
+    builder.button(
+        text="🧾 Проверить оплату",
+        callback_data=PaymentStatusCallback(
+            order_id=order_id,
+        ),
+    )
 
     builder.adjust(1)
 
