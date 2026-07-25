@@ -4,28 +4,21 @@ from aiogram import Router, F
 
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import Settings
 
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
+from app.bot.keyboards.payment import get_payment_inline_keyboard
 from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
 from app.bot.mappers import map_telegram_user
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.integrations.yookassa import AsyncYooKassa, YooKassaError
 
-from app.integrations.xui import AsyncXUI, XUIConfig
-
-from app.services.dto import VpnKeyAccess, TariffOption
-from app.services.vpn_key_service import VpnKeyService
+from app.services.dto import PaymentCheckout, TariffOption
+from app.services.payment_service import PaymentService, PaymentServiceError
 from app.services.tariff_service import TariffService
-
-from app.services.exceptions import (
-    VpnKeyCreationInProgressError,
-    VpnKeyCreationFailedError,
-    VpnKeyDisabledError,
-    VpnKeyRenewalInProgressError,
-    VpnKeyRenewalFailedError,
-    TariffServiceError,
-)
+from app.services.exceptions import TariffServiceError
 
 
 logger = logging.getLogger(__name__)
@@ -107,21 +100,21 @@ async def callback_tariff_selected(
     callback: CallbackQuery,
     callback_data: TariffCallback,
     session: AsyncSession,
-    xui: AsyncXUI,
-    xui_config: XUIConfig,
+    yookassa: AsyncYooKassa,
     settings: Settings,
 ) -> None:
     tariff_code: str = callback_data.tariff_code
 
     await callback.answer()
 
+    payment_service = PaymentService(
+        session=session,
+        yookassa=yookassa,
+        settings=settings,
+    )
+
     try:
-        vpn_key_service = VpnKeyService(
-            session=session,
-            xui=xui,
-            xui_config=xui_config,
-        )
-        vpn_key: VpnKeyAccess = await vpn_key_service.get_or_create_vpn_key_for_user(
+        checkout: PaymentCheckout = await payment_service.create_checkout(
             telegram_user=map_telegram_user(user=callback.from_user),
             tariff_code=tariff_code,
         )
@@ -138,123 +131,61 @@ async def callback_tariff_selected(
 
         await callback.message.edit_text(
             text=(
-                f"❌ Выбранный тариф на данный момент недоступен\n\n"
-                f"Пожалуйста, выберите другой тариф"
+                "❌ Выбранный тариф на данный момент недоступен\n\n"
+                "Пожалуйста, выберите другой тариф"
             ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
 
         return
 
-    except VpnKeyCreationInProgressError:
+    except (PaymentServiceError, YooKassaError):
         await session.rollback()
 
-        vpn_key_creation_in_progress_message: str = (
-            f"⏳ Немного подождите, VPN-ключ уже создаётся..."
-        )
-        await callback.message.edit_text(
-            text=vpn_key_creation_in_progress_message,
-            reply_markup=get_back_to_main_menu_inline_keyboard(),
-        )
-
-        return
-
-    except VpnKeyCreationFailedError:
-        await session.rollback()
-
-        logger.warning(
-            "Previous VPN key creation failed (telegram_user_id=%s, tariff_code=%s)",
+        logger.exception(
+            "Cannot create YooKassa payment (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
             tariff_code,
         )
 
-        vpn_key_creation_failed_message: str = (
-            f"⛓️‍💥 Не удалось завершить создание VPN-ключа\n\n"
-            f"Попробуйте ещё раз через пару минут"
-        )
         await callback.message.edit_text(
-            text=vpn_key_creation_failed_message,
-            reply_markup=get_back_to_main_menu_inline_keyboard(),
-        )
-
-        return
-
-    except VpnKeyDisabledError:
-        await session.rollback()
-
-        vpn_key_disabled_message: str = (
-            f"Ваш VPN-ключ отключён. Срок действия вашего тарифа истёк ⏱️\n\n"
-            f"Чтобы продолжить использовать VPN-ключ, выберите один из доступных тарифов"
-        )
-        await callback.message.edit_text(
-            text=vpn_key_disabled_message,
-            reply_markup=get_back_to_main_menu_inline_keyboard(),
-        )
-
-        return
-
-    except VpnKeyRenewalInProgressError:
-        await session.rollback()
-
-        vpn_key_renewal_in_progress_message: str = (
-            f"⏳ Немного подождите, VPN-ключ уже продлевается..."
-        )
-        await callback.message.edit_text(
-            text=vpn_key_renewal_in_progress_message,
-            reply_markup=get_back_to_main_menu_inline_keyboard(),
-        )
-
-        return
-
-    except VpnKeyRenewalFailedError:
-        await session.rollback()
-
-        logger.warning(
-            "VPN key renewal failed (telegram_user_id=%s, tariff_code=%s)",
-            callback.from_user.id,
-            tariff_code,
-        )
-
-        vpn_key_renewal_failed_message: str = (
-            f"⛓️‍💥 Не удалось завершить продление VPN-ключа\n\n"
-            f"Попробуйте ещё раз через пару минут"
-        )
-        await callback.message.edit_text(
-            text=vpn_key_renewal_failed_message,
+            text=(
+                f"⛓️‍💥 Не удалось сформировать оплату\n\n"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {settings.tg_support_username}"
+            ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
 
         return
 
     except Exception:
+        await session.rollback()
+
         logger.exception(
-            "Failed to create VPN key: telegram_user_id=%s, tariff_code=%s",
+            "Unexpected payment creation error (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
             tariff_code,
         )
 
-        await session.rollback()
-
-        failed_vpn_key_creating_message: str = (
-            f"Не удалось создать VPN-ключ ☹️\n\n"
-            f"Обратитесь в тех. поддержку: {settings.tg_support_username}"
-        )
         await callback.message.edit_text(
-            text=failed_vpn_key_creating_message,
+            text=(
+                f"⛓️‍💥 Не удалось сформировать оплату\n\n"
+                f"Попробуйте ещё раз позже или обратитесь в тех. поддержку: {settings.tg_support_username}"
+            ),
             reply_markup=get_back_to_main_menu_inline_keyboard(),
         )
 
         return
 
-    success_vpn_key_creating_message: str = (
-        f"✅ VPN-ключ готов!\n\n"
-        f"Действует до:\n"
-        f"{vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"
-        f"Ваш ключ:\n"
-        f"{vpn_key.subscription_url}\n\n"
-        f"Скопируйте ссылку и добавьте её в VPN-клиент"
-    )
     await callback.message.edit_text(
-        text=success_vpn_key_creating_message,
-        reply_markup=get_back_to_main_menu_inline_keyboard(),
+        text=(
+            f"🗃️ Заказ №{checkout.order_id} сформирован\n\n"
+            f"💳 К оплате: {checkout.amount_rub} ₽\n\n"
+            "Нажмите на кнопку «Перейти к оплате», чтобы оплатить заказ\n\n"
+            "После успешной оплаты бот автоматически продлит ваш VPN-ключ"
+        ),
+        reply_markup=get_payment_inline_keyboard(
+            confirmation_url=checkout.confirmation_url,
+            order_id=checkout.order_id,
+        ),
     )
