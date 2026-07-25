@@ -206,7 +206,10 @@ class PaymentService:
         if not isinstance(recipient, dict) or str(recipient.get("account_id")) != self.settings.yookassa_shop_id:
             raise PaymentVerificationError("Payment belongs to another shop")
 
-        is_test: bool = payment.get("test") is True
+        is_test: bool = payment.get("test")
+
+        if not isinstance(is_test, bool):
+            raise PaymentVerificationError("Payment does not contain a valid test flag")
 
         if is_test and not self.settings.yookassa_allow_test_payments:
             raise PaymentVerificationError("Test payment is forbidden in this environment")
