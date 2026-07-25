@@ -168,6 +168,17 @@ def downgrade() -> None:
     op.drop_column("vpn_keys", "last_fulfilled_order_id")
     op.drop_column("vpn_keys", "pending_order_id")
 
+    op.execute(
+        """
+        UPDATE orders
+        SET status = CASE
+            WHEN paid_at IS NOT NULL THEN 'paid'
+            ELSE 'failed'
+        END
+        WHERE status IN ('fulfilling', 'fulfilled')
+        """
+    )
+
     op.drop_constraint("ck_orders_status", "orders", type_="check")
     op.create_check_constraint(
         "ck_orders_status",
