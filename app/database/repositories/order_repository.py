@@ -104,6 +104,7 @@ class OrderRepository:
             .where(
                 Order.id == order_id,
                 Order.paid_at.is_not(None),
+                Order.fulfillment_attempts < 20,
                 or_(
                     Order.status == ORDER_PAID,
                     and_(
@@ -138,7 +139,12 @@ class OrderRepository:
             statement=update(table=Order)
             .where(
                 Order.id == order_id,
-                Order.status == ORDER_FULFILLING,
+                Order.paid_at.is_not(None),
+                Order.status.in_([
+                    ORDER_PAID,
+                    ORDER_FULFILLING,
+                    ORDER_FAILED,
+                ]),
             )
             .values(
                 status=ORDER_FULFILLED,
