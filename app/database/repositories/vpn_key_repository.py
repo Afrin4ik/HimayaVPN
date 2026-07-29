@@ -26,6 +26,20 @@ class VpnKeyRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_vpn_key_by_last_fulfilled_order_id(
+            self,
+            *,
+            order_id: int,
+    ) -> VpnKey | None:
+        result: Result[Tuple[VpnKey]] = await self.session.execute(
+            statement=select(VpnKey)
+            .options(selectinload(VpnKey.tariff))
+            .where(
+                VpnKey.last_fulfilled_order_id == order_id
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_all_xui_emails(self) -> set[str]:
         result: Result[Tuple[str | None]] = await self.session.execute(
             statement=select(VpnKey.xui_email).where(
@@ -39,12 +53,14 @@ class VpnKeyRepository:
             *,
             user_id: int,
             tariff_id: int,
+            pending_order_id: int | None = None,
     ) -> VpnKey:
         key = VpnKey(
             user_id=user_id,
             tariff_id=tariff_id,
             status=VPN_KEY_CREATING,
             inbound_ids=[],
+            pending_order_id=pending_order_id,
         )
         self.session.add(key)
         await self.session.flush()
@@ -63,7 +79,10 @@ class VpnKeyRepository:
     ) -> VpnKey:
         stmt = (
             update(table=VpnKey)
-            .where(VpnKey.id == vpn_key_id)
+            .where(
+                VpnKey.id == vpn_key_id,
+                VpnKey.status == VPN_KEY_CREATING,
+            )
             .values(
                 status=VPN_KEY_ACTIVE,
                 xui_email=xui_email,
@@ -72,6 +91,8 @@ class VpnKeyRepository:
                 inbound_ids=inbound_ids,
                 subscription_url=subscription_url,
                 expires_at=expires_at,
+                last_fulfilled_order_id=VpnKey.pending_order_id,
+                pending_order_id=None,
                 error_message=None,
                 updated_at=func.now(),
             )
@@ -85,6 +106,7 @@ class VpnKeyRepository:
             *,
             vpn_key_id: int,
             tariff_id: int,
+            pending_order_id: int | None,
     ) -> VpnKey:
         stmt = (
             update(table=VpnKey)
@@ -92,6 +114,7 @@ class VpnKeyRepository:
             .values(
                 tariff_id=tariff_id,
                 status=VPN_KEY_CREATING,
+                pending_order_id=pending_order_id,
                 error_message=None,
                 updated_at=func.now(),
             )
@@ -105,18 +128,26 @@ class VpnKeyRepository:
             *,
             vpn_key_id: int,
             tariff_id: int,
+            pending_order_id: int | None,
             stale_before: datetime,
     ) -> VpnKey | None:
+        if pending_order_id is None:
+            pending_order_condition = VpnKey.pending_order_id.is_(None)
+        else:
+            pending_order_condition = VpnKey.pending_order_id == pending_order_id
+
         stmt = (
             update(table=VpnKey)
             .where(
                 VpnKey.id == vpn_key_id,
                 VpnKey.status == VPN_KEY_CREATING,
                 VpnKey.updated_at <= stale_before,
+                pending_order_condition,
             )
             .values(
                 tariff_id=tariff_id,
                 status=VPN_KEY_CREATING,
+                pending_order_id=pending_order_id,
                 xui_email=None,
                 xui_uuid=None,
                 xui_sub_id=None,
@@ -139,6 +170,7 @@ class VpnKeyRepository:
             vpn_key_id: int,
             pending_tariff_id: int,
             pending_expires_at: datetime,
+            pending_order_id: int | None,
     ) -> VpnKey | None:
         stmt = (
             update(table=VpnKey)
@@ -150,6 +182,7 @@ class VpnKeyRepository:
                 status=VPN_KEY_RENEWING,
                 pending_tariff_id=pending_tariff_id,
                 pending_expires_at=pending_expires_at,
+                pending_order_id=pending_order_id,
                 error_message=None,
                 updated_at=func.now(),
             )
@@ -221,6 +254,8 @@ class VpnKeyRepository:
                 status=VPN_KEY_ACTIVE,
                 tariff_id=tariff_id,
                 expires_at=expires_at,
+                last_fulfilled_order_id=VpnKey.pending_order_id,
+                pending_order_id=None,
                 pending_tariff_id=None,
                 pending_expires_at=None,
                 error_message=None,
