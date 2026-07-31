@@ -19,6 +19,7 @@ from app.database.models import (
     VPN_KEY_RENEWING,
 )
 from app.database.repositories.vpn_key_repository import VpnKeyRepository
+from app.database.repositories.order_repository import OrderRepository
 from app.services.user_service import UserService
 from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
 
@@ -46,6 +47,7 @@ class VpnKeyService:
         self.xui: AsyncXUI = xui
         self.xui_config: XUIConfig = xui_config
         self.vpn_keys_repository = VpnKeyRepository(session=session)
+        self.order_repository = OrderRepository(session=session)
         self.user_service = UserService(session=session)
         self.tariff_service = TariffService(session=session)
 
@@ -126,8 +128,12 @@ class VpnKeyService:
             self,
             *,
             vpn_key: VpnKey,
+            fulfillment_order_id: int | None,
     ) -> VpnKey:
         if vpn_key.status == VPN_KEY_ACTIVE:
+            if fulfillment_order_id is not None and vpn_key.last_fulfilled_order_id != fulfillment_order_id:
+                raise VpnKeyCreationInProgressError(f"Another paid order has just created VPN key {vpn_key.id}")
+
             logger.info(
                 "Concurrent VPN key creation already completed (vpn_key_id=%s, user_id=%s)",
                 vpn_key.id,
@@ -200,15 +206,17 @@ class VpnKeyService:
 
         return self._to_vpn_key_access(vpn_key=vpn_key)
 
-    async def get_or_create_vpn_key_for_user(
+    async def fulfill_paid_order(
             self,
             *,
             telegram_user: TelegramUserData,
-            tariff_code: str,
+            tariff_id: int,
+            order_id: int,
     ) -> VpnKeyAccess:
         vpn_key: VpnKey | None = await self._get_create_or_renew_vpn_key(
             telegram_user=telegram_user,
-            tariff_code=tariff_code,
+            tariff_id=tariff_id,
+            fulfillment_order_id=order_id,
             allow_renewal=True,
             require_trial=False,
         )
@@ -222,15 +230,36 @@ class VpnKeyService:
             self,
             *,
             telegram_user: TelegramUserData,
-            tariff_code: str,
+            tariff_code: str | None = None,
+            tariff_id: int | None = None,
+            fulfillment_order_id: int | None = None,
             allow_renewal: bool,
             require_trial: bool,
     ) -> VpnKey | None:
+        if (tariff_code is None) == (tariff_id is None):
+            raise ValueError("Exactly one of tariff_code or tariff_id must be specified")
+
         user: User = await self.user_service.sync_telegram_user(telegram_user=telegram_user)
 
-        selected_tariff: Tariff = await self.tariff_service.get_active_tariff_by_code(code=tariff_code)
+        if tariff_id is not None:
+            selected_tariff: Tariff = await self.tariff_service.get_tariff_by_id(tariff_id=tariff_id)
+        else:
+            if tariff_code is None:
+                raise RuntimeError("Unexpectedly tariff_code is None")
+
+            selected_tariff: Tariff = await self.tariff_service.get_active_tariff_by_code(code=tariff_code)
 
         existing_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=user.id)
+
+        if (
+            fulfillment_order_id is not None
+            and existing_vpn_key is not None
+            and existing_vpn_key.last_fulfilled_order_id == fulfillment_order_id
+        ):
+            await self.order_repository.mark_fulfilled(order_id=fulfillment_order_id)
+            await self.session.commit()
+
+            return self._require_usable_active_vpn_key(vpn_key=existing_vpn_key)
 
         if require_trial:
             if existing_vpn_key is None:
@@ -263,6 +292,7 @@ class VpnKeyService:
                 vpn_key_id=existing_vpn_key.id,
                 pending_tariff_id=selected_tariff.id,
                 pending_expires_at=target_expires_at,
+                pending_order_id=fulfillment_order_id,
             )
 
             if renewal is None:
@@ -280,6 +310,9 @@ class VpnKeyService:
             if not allow_renewal:
                 raise VpnKeyRenewalInProgressError(f"VPN key {existing_vpn_key.id} is currently being renewed")
 
+            if existing_vpn_key.pending_order_id != fulfillment_order_id:
+                raise VpnKeyRenewalInProgressError(f"VPN key {existing_vpn_key.id} is being renewed for another order")
+
             renewal_stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_RENEWING_TIMEOUT
 
             renewed_vpn_key: VpnKey | None = await self.resume_stale_renewal(
@@ -293,11 +326,15 @@ class VpnKeyService:
             return renewed_vpn_key
 
         if existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_CREATING:
+            if existing_vpn_key.pending_order_id != fulfillment_order_id:
+                raise VpnKeyCreationInProgressError(f"VPN key {existing_vpn_key.id} is being created for another order")
+
             creation_stale_before: datetime = datetime.now(timezone.utc) - VPN_KEY_CREATING_TIMEOUT
 
             placeholder: VpnKey | None = await self.vpn_keys_repository.claim_stale_creating(
                 vpn_key_id=existing_vpn_key.id,
                 tariff_id=selected_tariff.id,
+                pending_order_id=fulfillment_order_id,
                 stale_before=creation_stale_before,
             )
 
@@ -315,9 +352,13 @@ class VpnKeyService:
             )
 
         elif existing_vpn_key is not None and existing_vpn_key.status == VPN_KEY_FAILED:
+            if existing_vpn_key.pending_order_id is not None and existing_vpn_key.pending_order_id != fulfillment_order_id:
+                raise VpnKeyCreationInProgressError(f"Failed VPN key {existing_vpn_key.id} belongs to another paid order")
+
             placeholder = await self.vpn_keys_repository.set_creating(
                 vpn_key_id=existing_vpn_key.id,
                 tariff_id=selected_tariff.id,
+                pending_order_id=fulfillment_order_id,
             )
             await self.session.commit()
 
@@ -326,6 +367,7 @@ class VpnKeyService:
                 placeholder = await self.vpn_keys_repository.create_placeholder(
                     user_id=user.id,
                     tariff_id=selected_tariff.id,
+                    pending_order_id=fulfillment_order_id,
                 )
                 await self.session.commit()
 
@@ -346,7 +388,10 @@ class VpnKeyService:
                     )
                     raise
 
-                return self._resolve_vpn_key_after_integrity_error(vpn_key=concurrent_vpn_key)
+                return self._resolve_vpn_key_after_integrity_error(
+                    vpn_key=concurrent_vpn_key,
+                    fulfillment_order_id=fulfillment_order_id,
+                )
 
         created_xui_client: CreatedXUIClient | None = None
         database_commit_started = False
@@ -384,6 +429,9 @@ class VpnKeyService:
                 expires_at=expires_at,
             )
 
+            if fulfillment_order_id is not None:
+                await self.order_repository.mark_fulfilled(order_id=fulfillment_order_id)
+
             database_commit_started = True
             await self.session.commit()
 
@@ -416,6 +464,9 @@ class VpnKeyService:
                     ) from original_exc
 
                 if refreshed_vpn_key is not None and refreshed_vpn_key.status == VPN_KEY_ACTIVE:
+                    if fulfillment_order_id is not None and refreshed_vpn_key.last_fulfilled_order_id != fulfillment_order_id:
+                        raise VpnKeyInvalidStateError("Active VPN key belongs to another order")
+
                     if refreshed_vpn_key.xui_email != created_xui_client.email:
                         await self.session.rollback()
 
@@ -568,6 +619,8 @@ class VpnKeyService:
         if vpn_key.pending_expires_at is None:
             raise VpnKeyInvalidStateError(f"Renewing VPN key {vpn_key.id} does not have pending_expires_at")
 
+        fulfillment_order_id: int | None = vpn_key.pending_order_id
+
         target_expires_at: datetime = vpn_key.pending_expires_at
         target_expiry_time_ms = int(target_expires_at.timestamp() * 1000)
 
@@ -588,6 +641,9 @@ class VpnKeyService:
                 expires_at=target_expires_at,
             )
 
+            if fulfillment_order_id is not None:
+                await self.order_repository.mark_fulfilled(order_id=fulfillment_order_id)
+
             database_commit_started = True
             await self.session.commit()
 
@@ -606,11 +662,14 @@ class VpnKeyService:
             if database_commit_started:
                 refreshed_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=vpn_key.user_id)
 
+                order_was_applied: bool = fulfillment_order_id is None or refreshed_vpn_key.last_fulfilled_order_id == fulfillment_order_id
+
                 if (
                     refreshed_vpn_key is not None
                     and refreshed_vpn_key.status == VPN_KEY_ACTIVE
                     and refreshed_vpn_key.expires_at is not None
                     and refreshed_vpn_key.expires_at >= target_expires_at
+                    and order_was_applied
                 ):
                     logger.warning(
                         "Renewal commit returned an error, but database already contains the result (vpn_key_id=%s)",
