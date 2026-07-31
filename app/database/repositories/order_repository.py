@@ -93,6 +93,46 @@ class OrderRepository:
 
         return list(result.scalars().all())
 
+    async def get_pending_provider_payment_ids(
+            self,
+            *,
+            limit: int = 50,
+    ) -> list[str]:
+        result: Result[Tuple[str | None]] = await self.session.execute(
+            statement=select(Order.provider_payment_id)
+            .where(
+                Order.status == ORDER_CREATED,
+                Order.provider == "yookassa",
+                Order.provider_payment_id.is_not(None),
+            )
+            .order_by(Order.created_at.asc())
+            .limit(limit)
+        )
+
+        return [payment_id for payment_id in result.scalars().all() if payment_id is not None]
+
+    async def get_unnotified_fulfilled_order_ids(
+            self,
+            *,
+            notification_retry_before: datetime,
+            limit: int = 50,
+    ) -> list[int]:
+        result: Result[Tuple[int]] = await self.session.execute(
+            statement=select(Order.id)
+            .where(
+                Order.status == ORDER_FULFILLED,
+                Order.notified_at.is_(None),
+                or_(
+                    Order.notification_error.is_(None),
+                    Order.updated_at <= notification_retry_before,
+                ),
+            )
+            .order_by(Order.fulfilled_at.asc())
+            .limit(limit)
+        )
+
+        return list(result.scalars().all())
+
     async def claim_order_for_fulfillment(
             self,
             *,
@@ -169,6 +209,44 @@ class OrderRepository:
             .values(
                 status=ORDER_FAILED,
                 fulfillment_error=error[:2000],
+                updated_at=func.now(),
+            )
+        )
+
+    async def mark_notified(
+            self,
+            *,
+            order_id: int,
+    ) -> None:
+        await self.session.execute(
+            statement=update(table=Order)
+            .where(
+                Order.id == order_id,
+                Order.status == ORDER_FULFILLED,
+                Order.notified_at.is_(None),
+            )
+            .values(
+                notified_at=func.now(),
+                notification_error=None,
+                updated_at=func.now(),
+            )
+        )
+
+    async def mark_notification_failed(
+            self,
+            *,
+            order_id: int,
+            error: str,
+    ) -> None:
+        await self.session.execute(
+            statement=update(table=Order)
+            .where(
+                Order.id == order_id,
+                Order.status == ORDER_FULFILLED,
+                Order.notified_at.is_(None),
+            )
+            .values(
+                notification_error=error[:2000],
                 updated_at=func.now(),
             )
         )
