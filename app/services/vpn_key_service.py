@@ -662,7 +662,13 @@ class VpnKeyService:
             if database_commit_started:
                 refreshed_vpn_key: VpnKey | None = await self.vpn_keys_repository.get_vpn_key_by_user_id(user_id=vpn_key.user_id)
 
-                order_was_applied: bool = fulfillment_order_id is None or refreshed_vpn_key.last_fulfilled_order_id == fulfillment_order_id
+                order_was_applied: bool = (
+                    fulfillment_order_id is None
+                    or (
+                        refreshed_vpn_key is not None
+                        and refreshed_vpn_key.last_fulfilled_order_id == fulfillment_order_id
+                    )
+                )
 
                 if (
                     refreshed_vpn_key is not None

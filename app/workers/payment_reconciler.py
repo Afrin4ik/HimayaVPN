@@ -179,6 +179,9 @@ async def notify_fulfilled_orders_once(
 
             vpn_key: VpnKey | None = await vpn_key_repository.get_vpn_key_by_last_fulfilled_order_id(order_id=order.id)
 
+            if vpn_key is None:
+                vpn_key = await vpn_key_repository.get_vpn_key_by_user_id(user_id=order.user_id)
+
             try:
                 if vpn_key is None:
                     raise RuntimeError("Fulfilled order does not have VPN key")

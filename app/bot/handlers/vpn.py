@@ -291,6 +291,9 @@ async def callback_payment_status(
 
         vpn_key: VpnKey | None = await vpn_key_repository.get_vpn_key_by_last_fulfilled_order_id(order_id=order.id)
 
+        if vpn_key is None:
+            vpn_key = await vpn_key_repository.get_vpn_key_by_user_id(user_id=order.user_id)
+
         if vpn_key is not None and vpn_key.subscription_url and vpn_key.expires_at is not None:
             message = (
                 f"✅ Заказ №{order.id} выполнен!\n\n"
