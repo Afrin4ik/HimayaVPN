@@ -3,7 +3,7 @@ import logging
 
 from datetime import datetime, timedelta, timezone
 
-from  aiogram import Bot
+from aiogram import Bot
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -233,7 +233,7 @@ async def notify_fulfilled_orders_once(
 
 async def run_payment_status_reconciler(
         *,
-        session_factory:async_sessionmaker[AsyncSession],
+        session_factory: async_sessionmaker[AsyncSession],
         yookassa: AsyncYooKassa,
         settings: Settings,
 ) -> None:
