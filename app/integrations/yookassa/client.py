@@ -1,4 +1,5 @@
 import aiohttp
+import asyncio
 
 from typing import Any
 
@@ -111,12 +112,30 @@ class AsyncYooKassa:
             request: dict[str, Any],
             idempotency_key: str,
     ) -> dict[str, Any]:
-        return await self._request(
-            method="POST",
-            path="/payments",
-            json=request,
-            idempotency_key=idempotency_key,
-        )
+        attempts = 3
+
+        for attempt in range(attempts):
+            try:
+                return await self._request(
+                    method="POST",
+                    path="/payments",
+                    json=request,
+                    idempotency_key=idempotency_key,
+                )
+
+            except YooKassaAPIError as exc:
+                is_retryable: bool = exc.status in {500, 502, 503, 504}
+
+                if not is_retryable or attempt == attempts - 1:
+                    raise
+
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                if attempt == attempts - 1:
+                    raise
+
+            await asyncio.sleep(2 ** attempt)
+
+        raise RuntimeError("Unreachable YooKassa retry state")
 
     async def get_payment(
             self,
