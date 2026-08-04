@@ -14,13 +14,7 @@ from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
 from app.services.user_service import UserService
 from app.services.dto import PaymentCheckout, TelegramUserData
 
-
-class PaymentServiceError(Exception):
-    pass
-
-
-class PaymentVerificationError(PaymentServiceError):
-    pass
+from app.services.exceptions import PaymentServiceError, PaymentVerificationError
 
 
 class PaymentService:

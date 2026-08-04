@@ -36,3 +36,27 @@ class TariffUnavailableError(TariffServiceError):
 
 class TariffConfigurationError(TariffServiceError):
     """Tariff contains invalid configuration"""
+
+
+class PaymentServiceError(Exception):
+    """Base payment application error"""
+
+
+class PaymentOrderNotFoundError(PaymentServiceError):
+    """Order does not exist or does not belong to the Telegram user"""
+
+
+class PaymentVerificationError(PaymentServiceError):
+    """Provider payment did not pass local verification"""
+
+
+class PaymentInvalidStateError(PaymentServiceError):
+    """Order cannot perform the requested state transition"""
+
+
+class PaymentProviderUnavailableError(PaymentServiceError):
+    """Retryable provider/network failure"""
+
+
+class PaymentProviderRejectedError(PaymentServiceError):
+    """Non-retryable provider API rejection"""
