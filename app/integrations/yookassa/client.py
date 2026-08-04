@@ -3,31 +3,12 @@ import asyncio
 
 from typing import Any
 
-
-class YooKassaError(Exception):
-    pass
-
-
-class YooKassaAPIError(YooKassaError):
-    def __init__(
-            self,
-            *,
-            status: int,
-            response: dict[str, Any] | None,
-    ) -> None:
-        self.status: int = status
-        self.response: dict[str, Any] | None = response
-
-        if response:
-            code = response.get("code")
-            description = response.get("description")
-        else:
-            code = None
-            description = None
-
-        super().__init__(
-            f"YooKassa API error: status={status}, code={code}, description={description}"
-        )
+from app.integrations.yookassa.exceptions import (
+    YooKassaAPIError,
+    YooKassaClientNotStartedError,
+    YooKassaResponseError,
+    YooKassaTransportError,
+)
 
 
 class AsyncYooKassa:
@@ -65,11 +46,11 @@ class AsyncYooKassa:
 
     def _require_session(self) -> aiohttp.ClientSession:
         if self._session is None:
-            raise RuntimeError("YooKassa client is not started")
+            raise YooKassaClientNotStartedError("YooKassa client is not started")
 
         return self._session
 
-    async def _request(
+    async def _request_once(
             self,
             *,
             method: str,
@@ -80,56 +61,68 @@ class AsyncYooKassa:
         session: aiohttp.ClientSession = self._require_session()
 
         headers: dict[str, str] = {}
-
         if idempotency_key is not None:
             headers["Idempotence-Key"] = idempotency_key
 
-        async with session.request(
-            method=method,
-            url=f"{self.API_BASE_URL}{path}",
-            json=json,
-            headers=headers,
-        ) as response:
-            try:
-                payload = await response.json(content_type=None)
-            except Exception:
-                payload = None
+        try:
+            async with session.request(
+                method=method,
+                url=f"{self.API_BASE_URL}{path}",
+                json=json,
+                headers=headers,
+            ) as response:
+                try:
+                    payload = await response.json(content_type=None)
+                except Exception:
+                    payload = None
 
-            if response.status != 200:
-                raise YooKassaAPIError(
-                    status=response.status,
-                    response=payload if isinstance(payload, dict) else None,
-                )
+                if not 200 <= response.status < 300:
+                    raise YooKassaAPIError(
+                        status=response.status,
+                        response=payload if isinstance(payload, dict) else None,
+                    )
 
-            if not isinstance(payload, dict):
-                raise YooKassaError("YooKassa returned a non-object JSON response")
+        except asyncio.TimeoutError as exc:
+            raise YooKassaTransportError(
+                "YooKassa request timed out"
+            ) from exc
 
-            return payload
+        except aiohttp.ClientError as exc:
+            raise YooKassaTransportError(
+                "YooKassa transport error"
+            ) from exc
 
-    async def create_payment(
+        if not isinstance(payload, dict):
+            raise YooKassaResponseError("YooKassa returned a non-object JSON response")
+
+        return payload
+
+    async def _request_with_retry(
             self,
             *,
-            request: dict[str, Any],
-            idempotency_key: str,
+            method: str,
+            path: str,
+            json: dict[str, Any] | None = None,
+            idempotency_key: str | None = None,
+            attempts: int = 3,
     ) -> dict[str, Any]:
-        attempts = 3
+        if attempts <= 0:
+            raise ValueError("attempts must be positive")
 
         for attempt in range(attempts):
             try:
-                return await self._request(
-                    method="POST",
-                    path="/payments",
-                    json=request,
+                return await self._request_once(
+                    method=method,
+                    path=path,
+                    json=json,
                     idempotency_key=idempotency_key,
                 )
 
             except YooKassaAPIError as exc:
-                is_retryable: bool = exc.status in {500, 502, 503, 504}
-
-                if not is_retryable or attempt == attempts - 1:
+                if not exc.retryable or attempt == attempts - 1:
                     raise
 
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except (YooKassaTransportError, YooKassaResponseError):
                 if attempt == attempts - 1:
                     raise
 
@@ -137,12 +130,27 @@ class AsyncYooKassa:
 
         raise RuntimeError("Unreachable YooKassa retry state")
 
+    async def create_payment(
+            self,
+            *,
+            request: dict[str, Any],
+            idempotency_key: str,
+    ) -> dict[str, Any]:
+        return await self._request_with_retry(
+            method="POST",
+            path="/payments",
+            json=request,
+            idempotency_key=idempotency_key,
+            attempts=3,
+        )
+
     async def get_payment(
             self,
             *,
             payment_id: str,
     ) -> dict[str, Any]:
-        return await self._request(
+        return await self._request_with_retry(
             method="GET",
             path=f"/payments/{payment_id}",
+            attempts=3,
         )
