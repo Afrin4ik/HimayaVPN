@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, Any
 
 from sqlalchemy import Result, and_, or_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +9,10 @@ from app.database.models import Order
 from app.database.models.statuses import (
     ORDER_CREATED,
     ORDER_PAID,
-    ORDER_FAILED,
+    ORDER_CANCELLED,
     ORDER_FULFILLING,
     ORDER_FULFILLED,
+    ORDER_FAILED,
 )
 
 
@@ -170,6 +171,60 @@ class OrderRepository:
         result: Result[Tuple[Order]] = await self.session.execute(statement=stmt)
         return result.scalar_one_or_none()
 
+    async def bind_created_payment(
+            self,
+            *,
+            order_id: int,
+            provider: str,
+            provider_payment_id: str,
+            confirmation_url: str,
+            payment_snapshot: dict[str, Any],
+    ) -> Order | None:
+        order: Order | None = await self.get_order_by_id(
+            order_id=order_id,
+            for_update=True,
+        )
+
+        if order is None:
+            return None
+
+        if order.provider_payment_id not in {None, provider_payment_id}:
+            return None
+
+        order.provider = provider
+        order.provider_payment_id = provider_payment_id
+        order.confirmation_url = confirmation_url
+        order.payload = {
+            **order.payload,
+            provider: payment_snapshot,
+        }
+
+        await self.session.flush()
+
+        return order
+
+    async def record_provider_observation(
+            self,
+            *,
+            order: Order,
+            provider: str,
+            provider_payment_id: str,
+            payment_snapshot: dict[str, Any],
+    ) -> bool:
+        if order.provider_payment_id not in {None, provider_payment_id}:
+            return False
+
+        order.provider = provider
+        order.provider_payment_id = provider_payment_id
+        order.payload = {
+            **order.payload,
+            provider: payment_snapshot,
+        }
+
+        await self.session.flush()
+
+        return True
+
     async def mark_fulfilled(
             self,
             *,
@@ -250,3 +305,42 @@ class OrderRepository:
                 updated_at=func.now(),
             )
         )
+
+    async def mark_paid(
+            self,
+            *,
+            order: Order,
+            paid_at: datetime,
+    ) -> bool:
+        if order.paid_at is not None:
+            return True
+
+        if order.status not in {ORDER_CREATED, ORDER_CANCELLED}:
+            return False
+
+        order.status = ORDER_PAID
+        order.paid_at = paid_at
+
+        await self.session.flush()
+
+        return True
+
+    async def mark_cancelled(
+            self,
+            *,
+            order: Order,
+    ) -> bool:
+        if order.paid_at is not None:
+            return False
+
+        if order.status == ORDER_CANCELLED:
+            return True
+
+        if order.status != ORDER_CREATED:
+            return False
+
+        order.status = ORDER_CANCELLED
+
+        await self.session.flush()
+
+        return True
