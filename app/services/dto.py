@@ -39,3 +39,14 @@ class PaymentCheckout:
     order_id: int
     confirmation_url: str
     amount_rub: int
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentOrderView:
+    order_id: int
+    status: str
+    amount_rub: int
+    confirmation_url: str | None
+    paid_at: datetime | None
+    subscription_url: str | None
+    vpn_expires_at: datetime | None
