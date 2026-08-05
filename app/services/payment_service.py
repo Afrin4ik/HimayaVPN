@@ -1,21 +1,19 @@
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, NoReturn
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.database.models.vpn_key import VpnKey
-from app.integrations.yookassa import AsyncYooKassa
-from app.database.models import Order, Tariff, User
-from app.database.models.statuses import (
-    ORDER_CREATED,
-    ORDER_PAID,
-    ORDER_CANCELLED,
-    ORDER_FULFILLED,
-    ORDER_FAILED,
+from app.integrations.yookassa import (
+    AsyncYooKassa,
+    YooKassaError,
+    YooKassaAPIError,
 )
+from app.database.models.vpn_key import VpnKey
+from app.database.models import Order, Tariff, User
+from app.database.models.statuses import ORDER_FULFILLED
 from app.database.repositories.order_repository import OrderRepository
 from app.database.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
@@ -30,6 +28,9 @@ from app.services.exceptions import (
     PaymentServiceError,
     PaymentVerificationError,
     PaymentOrderNotFoundError,
+    PaymentInvalidStateError,
+    PaymentProviderRejectedError,
+    PaymentProviderUnavailableError,
 )
 
 
@@ -75,6 +76,43 @@ class PaymentService:
             "total_gb": tariff.total_gb,
         }
 
+    @staticmethod
+    def _raise_provider_error(exc: YooKassaError) -> NoReturn:
+        if isinstance(exc, YooKassaAPIError) and not exc.retryable:
+            raise PaymentProviderRejectedError(
+                "YooKassa rejected the request"
+            ) from exc
+
+        raise PaymentProviderUnavailableError(
+            "YooKassa is temporarily unavailable"
+        ) from exc
+
+    async def _get_remote_payment(
+            self,
+            *,
+            payment_id: str,
+    ) -> dict[str, Any]:
+        try:
+            return await self.yookassa.get_payment(payment_id=payment_id)
+
+        except YooKassaError as exc:
+            self._raise_provider_error(exc=exc)
+
+    async def _create_remote_payment(
+            self,
+            *,
+            request: dict[str, Any],
+            idempotency_key: str,
+    ) -> dict[str, Any]:
+        try:
+            return await self.yookassa.create_payment(
+                request=request,
+                idempotency_key=idempotency_key,
+            )
+
+        except YooKassaError as exc:
+            self._raise_provider_error(exc=exc)
+
     async def create_checkout(
             self,
             *,
@@ -117,7 +155,7 @@ class PaymentService:
             },
         }
 
-        payment: dict[str, Any] = await self.yookassa.create_payment(
+        payment: dict[str, Any] = await self._create_remote_payment(
             request=payment_request,
             idempotency_key=order.idempotency_key,
         )
@@ -135,28 +173,25 @@ class PaymentService:
         if confirmation_url is None or not isinstance(confirmation_url, str) or not confirmation_url:
             raise PaymentServiceError("YooKassa did not return confirmation_url")
 
-        locked_order: Order | None = await self.order_repository.get_order_by_id(
+        bound_order: Order | None = await self.order_repository.bind_created_payment(
             order_id=order.id,
-            for_update=True,
+            provider="yookassa",
+            provider_payment_id=payment_id,
+            confirmation_url=confirmation_url,
+            payment_snapshot=self._payment_snapshot(payment=payment),
         )
 
-        if locked_order is None:
-            raise PaymentServiceError(f"Order {order.id} disappeared")
+        if bound_order is None:
+            await self.session.rollback()
 
-        locked_order.provider = "yookassa"
-        locked_order.provider_payment_id = payment_id
-        locked_order.confirmation_url = confirmation_url
-        locked_order.payload = {
-            **locked_order.payload,
-            "yookassa": self._payment_snapshot(payment=payment),
-        }
+            raise PaymentInvalidStateError(f"Cannot bind YooKassa payment {payment_id} to order {order.id}")
 
         await self.session.commit()
 
         return PaymentCheckout(
-            order_id=locked_order.id,
+            order_id=bound_order.id,
             confirmation_url=confirmation_url,
-            amount_rub=locked_order.amount_rub,
+            amount_rub=bound_order.amount_rub,
         )
 
     async def synchronize_payment(
@@ -164,7 +199,7 @@ class PaymentService:
             *,
             payment_id: str,
     ) -> None:
-        payment: dict[str, Any] = await self.yookassa.get_payment(payment_id=payment_id)
+        payment: dict[str, Any] = await self._get_remote_payment(payment_id=payment_id)
 
         metadata = payment.get("metadata")
 
@@ -214,10 +249,13 @@ class PaymentService:
 
         recipient = payment.get("recipient")
 
-        if not isinstance(recipient, dict) or str(recipient.get("account_id")) != self.settings.yookassa_shop_id:
+        if not isinstance(recipient, dict):
+            raise PaymentVerificationError("Payment does not contain valid recipient")
+
+        if str(recipient.get("account_id")) != self.settings.yookassa_shop_id:
             raise PaymentVerificationError("Payment belongs to another shop")
 
-        is_test: bool = payment.get("test")
+        is_test = payment.get("test")
 
         if not isinstance(is_test, bool):
             raise PaymentVerificationError("Payment does not contain a valid test flag")
@@ -225,12 +263,15 @@ class PaymentService:
         if is_test and not self.settings.yookassa_allow_test_payments:
             raise PaymentVerificationError("Test payment is forbidden in this environment")
 
-        order.provider = "yookassa"
-        order.provider_payment_id = payment_id
-        order.payload = {
-            **order.payload,
-            "yookassa": self._payment_snapshot(payment=payment),
-        }
+        saved: bool = await self.order_repository.record_provider_observation(
+            order=order,
+            provider="yookassa",
+            provider_payment_id=payment_id,
+            payment_snapshot=self._payment_snapshot(payment=payment),
+        )
+
+        if not saved:
+            raise PaymentVerificationError("Order is linked to another payment")
 
         status = payment.get("status")
         paid = payment.get("paid")
@@ -239,17 +280,28 @@ class PaymentService:
             if paid is not True:
                 raise PaymentVerificationError("Succeeded payment has paid=false")
 
-            if order.paid_at is None:
-                order.paid_at = datetime.now(timezone.utc)
+            transitioned: bool = await self.order_repository.mark_paid(
+                order=order,
+                paid_at=datetime.now(timezone.utc),
+            )
 
-                if order.status in {ORDER_CREATED, ORDER_CANCELLED, ORDER_FAILED}:
-                    order.status = ORDER_PAID
+            if not transitioned:
+                raise PaymentInvalidStateError(f"Order {order.id} cannot transition from {order.status!r} to paid")
 
         elif status == "canceled":
-            if order.paid_at is None:
-                order.status = ORDER_CANCELLED
+            if paid is True:
+                raise PaymentVerificationError("Canceled payment has paid=true")
 
-        elif status != "pending":
+            transitioned = await self.order_repository.mark_cancelled(order=order)
+
+            if not transitioned:
+                raise PaymentInvalidStateError(f"Order {order.id} cannot transition from {order.status!r} to cancelled")
+
+        elif status == "pending":
+            if order.paid_at is not None:
+                raise PaymentVerificationError("Provider returned pending for an already paid order")
+
+        else:
             raise PaymentVerificationError(f"Unsupported payment status {status!r}")
 
         await self.session.commit()
