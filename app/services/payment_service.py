@@ -6,15 +6,31 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.database.models.vpn_key import VpnKey
 from app.integrations.yookassa import AsyncYooKassa
 from app.database.models import Order, Tariff, User
-from app.database.models.statuses import ORDER_CREATED, ORDER_PAID, ORDER_CANCELLED, ORDER_FAILED
+from app.database.models.statuses import (
+    ORDER_CREATED,
+    ORDER_PAID,
+    ORDER_CANCELLED,
+    ORDER_FULFILLED,
+    ORDER_FAILED,
+)
 from app.database.repositories.order_repository import OrderRepository
+from app.database.repositories.vpn_key_repository import VpnKeyRepository
 from app.services.tariff_service import TariffService, TRIAL_TARIFF_CODE
 from app.services.user_service import UserService
-from app.services.dto import PaymentCheckout, TelegramUserData
+from app.services.dto import (
+    TelegramUserData,
+    PaymentCheckout,
+    PaymentOrderView,
+)
 
-from app.services.exceptions import PaymentServiceError, PaymentVerificationError
+from app.services.exceptions import (
+    PaymentServiceError,
+    PaymentVerificationError,
+    PaymentOrderNotFoundError,
+)
 
 
 class PaymentService:
@@ -30,6 +46,7 @@ class PaymentService:
         self.settings: Settings = settings
 
         self.order_repository = OrderRepository(session=session)
+        self.vpn_key_repository = VpnKeyRepository(session=session)
         self.user_service = UserService(session=session)
         self.tariff_service = TariffService(session=session)
 
@@ -146,7 +163,7 @@ class PaymentService:
             self,
             *,
             payment_id: str,
-    ) -> Order:
+    ) -> None:
         payment: dict[str, Any] = await self.yookassa.get_payment(payment_id=payment_id)
 
         metadata = payment.get("metadata")
@@ -236,4 +253,59 @@ class PaymentService:
             raise PaymentVerificationError(f"Unsupported payment status {status!r}")
 
         await self.session.commit()
-        return order
+
+    async def get_user_order_status(
+            self,
+            *,
+            order_id: int,
+            telegram_id: int,
+            synchronize: bool = True,
+    ) -> PaymentOrderView:
+        order: Order | None = await self.order_repository.get_order_for_telegram_user(
+            order_id=order_id,
+            telegram_id=telegram_id,
+        )
+
+        if order is None:
+            raise PaymentOrderNotFoundError(f"Order {order_id} was not found")
+
+        provider_payment_id: str | None = order.provider_payment_id
+
+        await self.session.commit()
+
+        if synchronize and provider_payment_id is not None:
+            await self.synchronize_payment(payment_id=provider_payment_id)
+
+            order = await self.order_repository.get_order_for_telegram_user(
+                order_id=order_id,
+                telegram_id=telegram_id,
+            )
+
+            if order is None:
+                raise PaymentOrderNotFoundError(f"Order {order_id} disappeared")
+
+        vpn_key: VpnKey | None = None
+
+        if order.status == ORDER_FULFILLED:
+            vpn_key = await self.vpn_key_repository.get_vpn_key_by_last_fulfilled_order_id(order_id=order.id)
+
+            if vpn_key is None:
+                vpn_key = await self.vpn_key_repository.get_vpn_key_by_user_id(user_id=order.user_id)
+
+        return PaymentOrderView(
+            order_id=order.id,
+            status=order.status,
+            amount_rub=order.amount_rub,
+            confirmation_url=order.confirmation_url,
+            paid_at=order.paid_at,
+            subscription_url=(
+                vpn_key.subscription_url
+                if vpn_key is not None
+                else None
+            ),
+            vpn_expires_at=(
+                vpn_key.expires_at
+                if vpn_key is not None
+                else None
+            ),
+        )
