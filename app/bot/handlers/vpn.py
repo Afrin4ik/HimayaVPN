@@ -15,15 +15,19 @@ from app.bot.mappers import map_telegram_user
 
 from app.integrations.yookassa import AsyncYooKassa, YooKassaError
 
-from app.services.dto import PaymentCheckout, TariffOption
-from app.services.payment_service import PaymentService, PaymentServiceError
+from app.services.payment_service import PaymentService
 from app.services.tariff_service import TariffService
-from app.services.exceptions import TariffServiceError
+from app.services.exceptions import (
+    TariffServiceError,
+    PaymentServiceError,
+    PaymentOrderNotFoundError,
+)
+from app.services.dto import (
+    TariffOption,
+    PaymentCheckout,
+    PaymentOrderView,
+)
 
-from app.database.repositories.vpn_key_repository import VpnKeyRepository
-from app.database.repositories.order_repository import OrderRepository
-from app.database.models.vpn_key import VpnKey
-from app.database.models.order import Order
 from app.database.models.statuses import (
     ORDER_CREATED,
     ORDER_CANCELLED,
@@ -212,58 +216,58 @@ async def callback_payment_status(
     yookassa: AsyncYooKassa,
     settings: Settings,
 ) -> None:
-    order_repository = OrderRepository(session=session)
+    payment_service = PaymentService(
+        session=session,
+        yookassa=yookassa,
+        settings=settings,
+    )
 
-    order: Order | None = await order_repository.get_order_by_id(order_id=callback_data.order_id)
+    try:
+        order: PaymentOrderView = await payment_service.get_user_order_status(
+            order_id=callback_data.order_id,
+            telegram_id=callback.from_user.id,
+            synchronize=True,
+        )
 
-    if order is None or order.user.telegram_id != callback.from_user.id:
+    except PaymentOrderNotFoundError:
+        await session.rollback()
+
         await callback.answer(
             text="🚨 Заказ не найден 🚨",
             show_alert=True,
         )
+
+        return
+
+    except PaymentServiceError:
+        await session.rollback()
+
+        logger.exception(
+            "Cannot check payment status (order_id=%s, telegram_user_id=%s)",
+            callback_data.order_id,
+            callback.from_user.id,
+        )
+
+        await callback.answer()
+
+        await callback.message.edit_text(
+            text=(
+                "❌ Не удалось проверить оплату\n\n"
+                "Попробуйте ещё раз через несколько минут"
+            ),
+            reply_markup=get_back_to_main_menu_inline_keyboard(),
+        )
+
         return
 
     await callback.answer()
-
-    if order.provider_payment_id is not None:
-        payment_service = PaymentService(
-            session=session,
-            yookassa=yookassa,
-            settings=settings,
-        )
-
-        try:
-            order: Order = await payment_service.synchronize_payment(payment_id=order.provider_payment_id)
-
-        except (PaymentServiceError, YooKassaError):
-            await session.rollback()
-
-            logger.exception(
-                "Cannot check payment status (order_id=%s, payment_id=%s)",
-                order.id,
-                order.provider_payment_id,
-            )
-
-            await callback.message.edit_text(
-                text=(
-                    "❌ Не удалось проверить оплату\n\n"
-                    "Попробуйте ещё раз через несколько минут"
-                ),
-                reply_markup=get_payment_inline_keyboard(
-                    confirmation_url=order.confirmation_url,
-                    order_id=order.id,
-                )
-                if order.confirmation_url else get_back_to_main_menu_inline_keyboard(),
-            )
-
-            return
 
     reply_markup: InlineKeyboardMarkup = get_back_to_main_menu_inline_keyboard()
     message: str = ""
 
     if order.status == ORDER_CREATED:
         message = (
-            f"💳 Заказ №{order.id} создан\n\n"
+            f"💳 Заказ №{order.order_id} создан\n\n"
             "💸 Оплата пока не завершена\n\n"
             "Если вы уже оплатили заказ, подождите несколько минут и нажмите «Проверить оплату» ещё раз"
         )
@@ -271,68 +275,61 @@ async def callback_payment_status(
         if order.confirmation_url:
             reply_markup = get_payment_inline_keyboard(
                 confirmation_url=order.confirmation_url,
-                order_id=order.id,
+                order_id=order.order_id,
             )
 
     elif order.status == ORDER_PAID:
         message = (
-            f"✅ Оплата заказа №{order.id} получена!\n\n"
+            f"✅ Оплата заказа №{order.order_id} получена!\n\n"
             "⏳ VPN-ключ ожидает обработки, немного подождите..."
         )
 
     elif order.status == ORDER_FULFILLING:
         message = (
-            f"✅ Оплата заказа №{order.id} получена!\n\n"
+            f"✅ Оплата заказа №{order.order_id} получена!\n\n"
             "⏳ VPN-ключ сейчас продлевается, немного подождите..."
         )
 
     elif order.status == ORDER_FULFILLED:
-        vpn_key_repository = VpnKeyRepository(session=session)
-
-        vpn_key: VpnKey | None = await vpn_key_repository.get_vpn_key_by_last_fulfilled_order_id(order_id=order.id)
-
-        if vpn_key is None:
-            vpn_key = await vpn_key_repository.get_vpn_key_by_user_id(user_id=order.user_id)
-
-        if vpn_key is not None and vpn_key.subscription_url and vpn_key.expires_at is not None:
+        if order.subscription_url is not None and order.vpn_expires_at is not None:
             message = (
-                f"✅ Заказ №{order.id} выполнен!\n\n"
+                f"✅ Заказ №{order.order_id} оплачен!\n\n"
                 f"📆 Тариф VPN-ключа успешно продлён!\n\n"
                 f"⏱️ Дата окончания действия тарифа:\n"
-                f"{vpn_key.expires_at:%d.%m.%Y %H:%M} UTC\n\n"
+                f"{order.vpn_expires_at:%d.%m.%Y %H:%M} UTC\n\n"
                 f"🔑 Ваш VPN-ключ:\n"
-                f"{vpn_key.subscription_url}"
+                f"{order.subscription_url}"
             )
 
         else:
             message = (
-                f"✅ Заказ №{order.id} выполнен!\n\n"
+                f"✅ Заказ №{order.order_id} оплачен!\n\n"
                 "🪪 Дату окончания действия тарифа и VPN-ключ можно посмотреть в профиле"
             )
 
     elif order.status == ORDER_CANCELLED:
         message = (
-            f"⛔ Платёж по заказу №{order.id} отменён\n\n"
+            f"⛔ Платёж по заказу №{order.order_id} отменён\n\n"
             "Вы можете вернуться к списку тарифов и создать новый заказ"
         )
 
     elif order.status == ORDER_FAILED:
         if order.paid_at is not None:
             message = (
-                f"✅ Оплата заказа №{order.id} получена\n\n"
-                "⚙️ Возникла техническая задержка при продлении VPN-ключа, немного подождите...\n\n"
-                "Повторная обработка выполняется автоматически"
+                f"✅ Оплата заказа №{order.order_id} получена\n\n"
+                "⚙️ Возникла техническая задержка при продлении тарифа VPN-ключа\n\n"
+                "Повторная обработка выполняется автоматически, немного подождите..."
             )
 
         else:
             message = (
-                f"❌ Не удалось обработать заказ №{order.id}\n\n"
+                f"❌ Не удалось обработать заказ №{order.order_id}\n\n"
                 f"Создайте новый заказ или обратитесь в тех. поддержку: {settings.tg_support_username}"
             )
 
     else:
         message = (
-            f"🚨 Неизвестный статус заказа №{order.id}\n\n"
+            f"🚨 Неизвестный статус заказа №{order.order_id}\n\n"
             f"Обратитесь в тех. поддержку: {settings.tg_support_username}"
         )
 
