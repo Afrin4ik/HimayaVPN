@@ -291,12 +291,12 @@ async def callback_payment_status(
         )
 
     elif order.status == ORDER_FULFILLED:
-        if order.subscription_url is not None and order.vpn_expires_at is not None:
+        if order.subscription_url is not None and order.vpn_key_expires_at is not None:
             message = (
                 f"✅ Заказ №{order.order_id} оплачен!\n\n"
                 f"📆 Тариф VPN-ключа успешно продлён!\n\n"
                 f"⏱️ Дата окончания действия тарифа:\n"
-                f"{order.vpn_expires_at:%d.%m.%Y %H:%M} UTC\n\n"
+                f"{order.vpn_key_expires_at:%d.%m.%Y %H:%M} UTC\n\n"
                 f"🔑 Ваш VPN-ключ:\n"
                 f"{order.subscription_url}"
             )

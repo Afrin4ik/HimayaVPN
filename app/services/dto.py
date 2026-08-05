@@ -49,4 +49,4 @@ class PaymentOrderView:
     confirmation_url: str | None
     paid_at: datetime | None
     subscription_url: str | None
-    vpn_expires_at: datetime | None
+    vpn_key_expires_at: datetime | None

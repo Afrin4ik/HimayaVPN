@@ -303,7 +303,7 @@ class PaymentService:
                 if vpn_key is not None
                 else None
             ),
-            vpn_expires_at=(
+            vpn_key_expires_at=(
                 vpn_key.expires_at
                 if vpn_key is not None
                 else None
