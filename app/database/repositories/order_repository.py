@@ -65,6 +65,28 @@ class OrderRepository:
         result: Result[Tuple[Order]] = await self.session.execute(statement=stmt)
         return result.scalar_one_or_none()
 
+    async def get_order_for_telegram_user(
+            self,
+            *,
+            order_id: int,
+            telegram_id: int,
+    ) -> Order | None:
+        stmt = (
+            select(Order)
+            .options(
+                selectinload(Order.user),
+                selectinload(Order.tariff),
+            )
+            .where(
+                Order.id == order_id,
+                Order.user.has(telegram_id=telegram_id),
+            )
+        )
+
+        result: Result[Tuple[Order]] = await self.session.execute(statement=stmt)
+
+        return result.scalar_one_or_none()
+
     async def get_fulfillable_order_ids(
             self,
             *,
