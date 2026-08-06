@@ -199,7 +199,7 @@ async def callback_tariff_selected(
             f"🗃️ Заказ №{checkout.order_id} сформирован\n\n"
             f"💳 К оплате: {checkout.amount_rub} ₽\n\n"
             "Нажмите на кнопку «Перейти к оплате», чтобы оплатить заказ\n\n"
-            "После успешной оплаты бот автоматически продлит ваш VPN-ключ"
+            "После успешной оплаты бот автоматически продлит тариф вашего VPN-ключа"
         ),
         reply_markup=get_payment_inline_keyboard(
             confirmation_url=checkout.confirmation_url,
