@@ -6,8 +6,15 @@ from aiohttp import web
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.integrations.yookassa import AsyncYooKassa, YooKassaError
-from app.services.payment_service import PaymentService, PaymentVerificationError
+from app.integrations.yookassa import AsyncYooKassa
+from app.services.payment_service import PaymentService
+from app.services.exceptions import (
+    PaymentServiceError,
+    PaymentInvalidStateError,
+    PaymentProviderRejectedError,
+    PaymentProviderUnavailableError,
+    PaymentVerificationError,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +86,11 @@ def build_yookassa_http_app(
             try:
                 await payment_service.synchronize_payment(payment_id=payment_id)
 
-            except PaymentVerificationError:
+            except (
+                PaymentVerificationError,
+                PaymentProviderRejectedError,
+                PaymentInvalidStateError,
+            ):
                 await session.rollback()
 
                 logger.warning(
@@ -91,11 +102,21 @@ def build_yookassa_http_app(
 
                 return web.Response(status=200)
 
-            except YooKassaError:
+            except PaymentProviderUnavailableError:
                 await session.rollback()
 
                 logger.exception(
-                    "Cannot verify YooKassa notification (payment_id=%s)",
+                    "YooKassa is unavailable while processing webhook (payment_id=%s)",
+                    payment_id,
+                )
+
+                return web.Response(status=503)
+
+            except PaymentServiceError:
+                await session.rollback()
+
+                logger.exception(
+                    "Payment service failed while processing webhook (payment_id=%s)",
                     payment_id,
                 )
 
@@ -105,7 +126,7 @@ def build_yookassa_http_app(
                 await session.rollback()
 
                 logger.exception(
-                    "Cannot persist YooKassa notification (payment_id=%s)",
+                    "Unexpected error while processing YooKassa webhook (payment_id=%s)",
                     payment_id,
                 )
 
