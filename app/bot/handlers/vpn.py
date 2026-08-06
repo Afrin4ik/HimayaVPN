@@ -13,7 +13,7 @@ from app.bot.keyboards.payment import PaymentStatusCallback, get_payment_inline_
 from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
 from app.bot.mappers import map_telegram_user
 
-from app.integrations.yookassa import AsyncYooKassa, YooKassaError
+from app.integrations.yookassa import AsyncYooKassa
 
 from app.services.payment_service import PaymentService
 from app.services.tariff_service import TariffService
@@ -156,7 +156,7 @@ async def callback_tariff_selected(
 
         return
 
-    except (PaymentServiceError, YooKassaError):
+    except PaymentServiceError:
         await session.rollback()
 
         logger.exception(
