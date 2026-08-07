@@ -7,9 +7,13 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 
 from app.config import Settings, get_settings
+
 from app.bot.router import build_router
 from app.bot.middlewares.database import DatabaseSessionMiddleware
+from app.bot.middlewares.services import RequestServicesMiddleware
+
 from app.database.connection import Database, create_database
+
 from app.integrations.xui import AsyncXUI, XUIConfig
 from app.integrations.xui.factory import build_xui_config
 from app.integrations.yookassa import AsyncYooKassa
@@ -87,6 +91,13 @@ async def main() -> None:
         dispatcher.update.middleware(
             middleware=DatabaseSessionMiddleware(
                 session_factory=database.session_factory,
+            )
+        )
+
+        dispatcher.update.middleware(
+            middleware=RequestServicesMiddleware(
+                yookassa=yookassa,
+                settings=settings,
             )
         )
 
