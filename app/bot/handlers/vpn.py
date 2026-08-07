@@ -4,19 +4,14 @@ from aiogram import Router, F
 
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config import Settings
 
+from app.bot.middlewares.services import RequestServices
 from app.bot.keyboards.common import get_back_to_main_menu_inline_keyboard
 from app.bot.keyboards.payment import PaymentStatusCallback, get_payment_inline_keyboard
 from app.bot.keyboards.tariffs import TariffCallback, get_tariffs_inline_keyboard
 from app.bot.mappers import map_telegram_user
 
-from app.integrations.yookassa import AsyncYooKassa
-
-from app.services.payment_service import PaymentService
-from app.services.tariff_service import TariffService
 from app.services.exceptions import (
     TariffServiceError,
     PaymentServiceError,
@@ -47,19 +42,15 @@ router = Router()
 @router.callback_query(F.data == "connect_vpn")
 async def callback_connect_vpn(
     callback: CallbackQuery,
-    session: AsyncSession,
+    services: RequestServices,
     settings: Settings
 ) -> None:
     await callback.answer()
 
-    tariff_service = TariffService(session=session)
-
     try:
-        tariffs: list[TariffOption] = await tariff_service.get_public_active_tariffs()
+        tariffs: list[TariffOption] = await services.tariffs.get_public_active_tariffs()
 
     except TariffServiceError:
-        await session.rollback()
-
         logger.exception(
             "Cannot load public active tariffs (telegram_user_id=%s)",
             callback.from_user.id,
@@ -76,8 +67,6 @@ async def callback_connect_vpn(
         return
 
     except Exception:
-        await session.rollback()
-
         logger.exception(
             "Unexpected error while loading tariffs (telegram_user_id=%s)",
             callback.from_user.id,
@@ -116,29 +105,20 @@ async def callback_connect_vpn(
 async def callback_tariff_selected(
     callback: CallbackQuery,
     callback_data: TariffCallback,
-    session: AsyncSession,
-    yookassa: AsyncYooKassa,
+    services: RequestServices,
     settings: Settings,
 ) -> None:
     tariff_code: str = callback_data.tariff_code
 
     await callback.answer()
 
-    payment_service = PaymentService(
-        session=session,
-        yookassa=yookassa,
-        settings=settings,
-    )
-
     try:
-        checkout: PaymentCheckout = await payment_service.create_checkout(
+        checkout: PaymentCheckout = await services.payments.create_checkout(
             telegram_user=map_telegram_user(user=callback.from_user),
             tariff_code=tariff_code,
         )
 
     except TariffServiceError:
-        await session.rollback()
-
         logger.warning(
             "Selected tariff is unavailable (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
@@ -157,8 +137,6 @@ async def callback_tariff_selected(
         return
 
     except PaymentServiceError:
-        await session.rollback()
-
         logger.exception(
             "Cannot create YooKassa payment (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
@@ -176,8 +154,6 @@ async def callback_tariff_selected(
         return
 
     except Exception:
-        await session.rollback()
-
         logger.exception(
             "Unexpected payment creation error (telegram_user_id=%s, tariff_code=%s)",
             callback.from_user.id,
@@ -212,26 +188,17 @@ async def callback_tariff_selected(
 async def callback_payment_status(
     callback: CallbackQuery,
     callback_data: PaymentStatusCallback,
-    session: AsyncSession,
-    yookassa: AsyncYooKassa,
+    services: RequestServices,
     settings: Settings,
 ) -> None:
-    payment_service = PaymentService(
-        session=session,
-        yookassa=yookassa,
-        settings=settings,
-    )
-
     try:
-        order: PaymentOrderView = await payment_service.get_user_order_status(
+        order: PaymentOrderView = await services.payments.get_user_order_status(
             order_id=callback_data.order_id,
             telegram_id=callback.from_user.id,
             synchronize=True,
         )
 
     except PaymentOrderNotFoundError:
-        await session.rollback()
-
         await callback.answer(
             text="🚨 Заказ не найден 🚨",
             show_alert=True,
@@ -240,8 +207,6 @@ async def callback_payment_status(
         return
 
     except PaymentServiceError:
-        await session.rollback()
-
         logger.exception(
             "Cannot check payment status (order_id=%s, telegram_user_id=%s)",
             callback_data.order_id,
