@@ -27,6 +27,7 @@ class OrderRepository:
             user_id: int,
             tariff_id: int,
             amount_rub: int,
+            provider: str,
             idempotency_key: str,
             payload: dict[str, Any],
     ) -> tuple[Order, bool]:
@@ -37,7 +38,7 @@ class OrderRepository:
                 tariff_id=tariff_id,
                 amount_rub=amount_rub,
                 status=ORDER_CREATED,
-                provider="yookassa",
+                provider=provider,
                 idempotency_key=idempotency_key,
                 payload=payload,
             )
