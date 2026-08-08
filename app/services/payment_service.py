@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, NoReturn
-from uuid import uuid4
+from uuid import uuid5, NAMESPACE_URL
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,9 @@ from app.services.exceptions import (
     PaymentProviderRejectedError,
     PaymentProviderUnavailableError,
 )
+
+
+PAYMENT_PROVIDER = "yookassa"
 
 
 class PaymentService:
@@ -87,6 +90,20 @@ class PaymentService:
             "YooKassa is temporarily unavailable"
         ) from exc
 
+    @staticmethod
+    def _checkout_idempotency_key(*, request_id: str) -> str:
+        normalized_request_id: str = request_id.strip()
+
+        if not normalized_request_id:
+            raise PaymentServiceError("Checkout request_id cannot be empty")
+
+        return str(
+            uuid5(
+                namespace=NAMESPACE_URL,
+                name=f"himayavpn:telegram-checkout:{normalized_request_id}",
+            )
+        )
+
     async def _get_remote_payment(
             self,
             *,
@@ -118,6 +135,7 @@ class PaymentService:
             *,
             telegram_user: TelegramUserData,
             tariff_code: str,
+            request_id: str,
     ) -> PaymentCheckout:
         user: User = await self.user_service.sync_telegram_user(telegram_user=telegram_user)
 
@@ -125,17 +143,39 @@ class PaymentService:
         if tariff.code == TRIAL_TARIFF_CODE or tariff.price_rub <= 0:
             raise PaymentServiceError("This tariff cannot be purchased")
 
-        idempotency_key = str(uuid4())
+        idempotency_key: str = self._checkout_idempotency_key(request_id=request_id)
 
-        order: Order = await self.order_repository.create_order(
+        order: Order
+        _created: bool
+        order, _created = await self.order_repository.create_or_get_order(
             user_id=user.id,
             tariff_id=tariff.id,
             amount_rub=tariff.price_rub,
+            provider=PAYMENT_PROVIDER,
             idempotency_key=idempotency_key,
             payload={
                 "tariff_snapshot": self._tariff_snapshot(tariff=tariff),
             },
         )
+
+        if (
+            order.user_id != user.id
+            or order.tariff_id != tariff.id
+            or order.amount_rub != tariff.price_rub
+            or order.provider not in {None, PAYMENT_PROVIDER}
+        ):
+            await self.session.rollback()
+
+            raise PaymentVerificationError("Idempotency key belongs to another checkout")
+
+        if order.provider_payment_id is not None and order.confirmation_url is not None:
+            await self.session.commit()
+
+            return PaymentCheckout(
+                order_id=order.id,
+                confirmation_url=order.confirmation_url,
+                amount_rub=order.amount_rub,
+            )
 
         await self.session.commit()
 
@@ -160,23 +200,24 @@ class PaymentService:
             idempotency_key=order.idempotency_key,
         )
 
-        payment_id = payment.get("id")
-        if not isinstance(payment_id, str) or not payment_id:
+        provider_payment_id = payment.get("id")
+        if not isinstance(provider_payment_id, str) or not provider_payment_id:
             raise PaymentServiceError("YooKassa did not return payment id")
 
         confirmation = payment.get("confirmation")
+
         if isinstance(confirmation, dict):
             confirmation_url = confirmation.get("confirmation_url")
         else:
             confirmation_url = None
 
-        if confirmation_url is None or not isinstance(confirmation_url, str) or not confirmation_url:
+        if not isinstance(confirmation_url, str) or not confirmation_url:
             raise PaymentServiceError("YooKassa did not return confirmation_url")
 
         bound_order: Order | None = await self.order_repository.bind_created_payment(
             order_id=order.id,
-            provider="yookassa",
-            provider_payment_id=payment_id,
+            provider=PAYMENT_PROVIDER,
+            provider_payment_id=provider_payment_id,
             confirmation_url=confirmation_url,
             payment_snapshot=self._payment_snapshot(payment=payment),
         )
@@ -184,7 +225,7 @@ class PaymentService:
         if bound_order is None:
             await self.session.rollback()
 
-            raise PaymentInvalidStateError(f"Cannot bind YooKassa payment {payment_id} to order {order.id}")
+            raise PaymentInvalidStateError(f"Cannot bind YooKassa payment {provider_payment_id} to order {order.id}")
 
         await self.session.commit()
 
