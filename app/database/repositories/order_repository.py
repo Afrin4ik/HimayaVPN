@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Tuple, Any
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import Result, and_, or_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,29 +21,49 @@ class OrderRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session: AsyncSession = session
 
-    async def create_order(
+    async def create_or_get_order(
             self,
             *,
             user_id: int,
             tariff_id: int,
             amount_rub: int,
             idempotency_key: str,
-            payload: dict,
-    ) -> Order:
-        order = Order(
-            user_id=user_id,
-            tariff_id=tariff_id,
-            amount_rub=amount_rub,
-            status=ORDER_CREATED,
-            provider="yookassa",
-            idempotency_key=idempotency_key,
-            payload=payload,
+            payload: dict[str, Any],
+    ) -> tuple[Order, bool]:
+        stmt = (
+            insert(table=Order)
+            .values(
+                user_id=user_id,
+                tariff_id=tariff_id,
+                amount_rub=amount_rub,
+                status=ORDER_CREATED,
+                provider="yookassa",
+                idempotency_key=idempotency_key,
+                payload=payload,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[Order.idempotency_key],
+            )
+            .returning(Order)
         )
 
-        self.session.add(order)
-        await self.session.flush()
+        result: Result[Tuple[Order]] = await self.session.execute(statement=stmt)
+        created_order: Order | None = result.scalar_one_or_none()
 
-        return order
+        if created_order is not None:
+            return created_order, True
+
+        existing_result: Result[Tuple[Order]] = await self.session.execute(
+            statement=select(Order).where(
+                Order.idempotency_key == idempotency_key,
+            )
+        )
+        existing_order: Order | None = existing_result.scalar_one_or_none()
+
+        if existing_order is None:
+            raise RuntimeError(f"Order was not inserted and cannot be found by idempotency_key={idempotency_key!r}")
+
+        return existing_order, False
 
     async def get_order_by_id(
             self,
