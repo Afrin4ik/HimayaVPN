@@ -116,6 +116,7 @@ async def callback_tariff_selected(
         checkout: PaymentCheckout = await services.payments.create_checkout(
             telegram_user=map_telegram_user(user=callback.from_user),
             tariff_code=tariff_code,
+            request_id=callback.id,
         )
 
     except TariffServiceError:
